@@ -1,0 +1,178 @@
+version: 2
+
+shared: &shared
+  docker:
+    - image: debian:stretch
+  environment: &shared_environment
+    CLICOLOR_FORCE: 1
+    mplabx_dir: /opt/mplabx
+  steps:
+    - checkout
+    - run:
+        name: Install dependencies
+        command: |
+          dpkg --add-architecture i386
+          apt-get update
+          apt-get install -y --no-install-recommends  \
+            ca-certificates                           \
+            libc6:i386                                \
+            make                                      \
+
+    - attach_workspace:
+        at: /opt
+
+    - run:
+        name: Print
+        command: |
+          ls -l /opt/
+
+    - run:
+        name: Configure
+        command: |
+          $mplabx_dir/mplab_platform/bin/prjMakefilesGenerator.sh -v "$project_dir"
+
+
+    - run:
+        name: Build
+        command: |
+          make -C "$project_dir" CONF="$build_config" build
+
+
+
+
+jobs:
+  setup-env:
+    <<: *shared
+    steps:
+    - run:
+        name: Install dependencies
+        command: |
+          dpkg --add-architecture i386
+          apt-get update
+          apt-get install -y --no-install-recommends  \
+            ca-certificates                           \
+            libc6:i386                                \
+            procps                                    \
+            wget                                      \
+
+    - restore_cache:
+        name: Restore XC16 installation from cache
+        keys:
+          - xc16-cache #-{{ checksum ".circleci/config.yml" }}
+    - run:
+        name: Install XC16
+        command: |
+          url='https://www.microchip.com/mymicrochip/filehandler.aspx?ddocname=en558868' #XC16 1.35
+          xc16_inst_sha256='c681d2c132edcd8659487e08b531add76cd154329da5457f77527a60b6c24aed'
+          xc16_inst='/tmp/xc16'
+          xc16_install_marker="/opt/microchip/xc16/hash-$xc16_inst_sha256"
+          if [ -f "$xc16_install_marker" ]; then
+              echo 'XC16 in cache'
+              exit 0
+          fi
+
+          wget -O "$xc16_inst" "$url"
+          chmod +x "$xc16_inst"
+          sha256sum -c <(echo "${xc16_inst_sha256} *${xc16_inst}")
+          "$xc16_inst" --version
+          "$xc16_inst"                  \
+            --mode unattended           \
+            --unattendedmodeui none     \
+            --netservername localhost   \
+            --LicenseType FreeMode      \
+    
+          rm -fv "$xc16_inst"
+          touch "$xc16_install_marker"
+    - save_cache:
+        name: Save XC16 installation to cache
+        key: xc16-cache #-{{ checksum ".circleci/config.yml" }}
+        paths:
+          - /opt/microchip
+
+    - restore_cache:
+        name: Restore MBLAB X installation from cache
+        keys:
+          - mplabx-cache #-{{ checksum ".circleci/config.yml" }}
+    - run:
+        name: Install MPLAB X
+        command: |
+          mplabx_url='https://ww1.microchip.com/downloads/en/DeviceDoc/MPLABX-v5.00-linux-installer.tar'
+          mplabx_tar_sha256='645ecd31dd9edbe7545300f6e3ee10f9329a078d19c1ebac4d3c34d32dd38ce7'
+          mplabx_tar='mplabx.tar'
+          mplabx_inst='./MPLABX-v5.00-linux-installer.sh'
+          mplabx_install_marker="$mplabx_dir/hash-$mplabx_tar_sha256"
+          if [ -f "$mplabx_install_marker" ]; then
+              echo 'MPLABX in cache'
+              exit 0
+          fi
+
+          wget -O "$mplabx_tar" "$mplabx_url"
+          sha256sum -c <(echo "${mplabx_tar_sha256} *${mplabx_tar}")
+          tar xf "$mplabx_tar"
+          USER=root "$mplabx_inst" --nolibrarycheck -- --version
+          USER=root "$mplabx_inst" --nolibrarycheck --nox11 -- \
+            --unattendedmodeui none                            \
+            --mode unattended                                  \
+            --ipe 0                                            \
+            --installdir "$mplabx_dir"                         \
+
+          rm -fv "$mplabx_tar" "$mplabx_inst"
+          touch "$mplabx_install_marker"
+    - save_cache:
+        name: Save MPLAB X installation to cache
+        key: mplabx #-cache-{{ checksum ".circleci/config.yml" }}
+        paths:
+          - /opt/mplabx
+
+    - persist_to_workspace:
+        root: /opt/
+        paths:
+          - mplabx
+          - microchip
+
+  buspirate-v4:
+    <<: *shared
+    environment:
+      <<: *shared_environment
+      build_config: BusPirate_v4
+      project_dir: ./Firmware/busPirate.X
+
+  buspirate-v3:
+    <<: *shared
+    environment:
+      <<: *shared_environment
+      build_config: BusPirate_v3
+      project_dir: ./Firmware/busPirate.X
+
+  buspirate-v4-bootloader:
+    <<: *shared
+    environment:
+      <<: *shared_environment
+      build_config: default
+      project_dir: ./Bootloaders/BPv4-bootloader/firmware-v1/bpv4-bootloader.X
+
+  buspirate-v3-bootloader:
+    <<: *shared
+    environment:
+      <<: *shared_environment
+      build_config: default
+      project_dir: ./Bootloaders/BPv3-bootloader/firmware-v4.5/ds30loader.X
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - setup-env
+      - buspirate-v4:
+          requires:
+          - setup-env
+      - buspirate-v3:
+          requires:
+          - setup-env
+      - buspirate-v4-bootloader:
+          requires:
+          - setup-env
+      - buspirate-v3-bootloader:
+          requires:
+           - setup-env
+
