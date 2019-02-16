@@ -232,18 +232,6 @@ _BPMSG1094_str:
 _BPMSG1095_str:
 	.pasciz "AUX INPUT/HI-Z, READ: "
 
-	; BPMSG1096
-	.section .text.BPMSG1096, code
-	.global _BPMSG1096_str
-_BPMSG1096_str:
-	.pasciz "POWER SUPPLIES ON"
-
-	; BPMSG1097
-	.section .text.BPMSG1097, code
-	.global _BPMSG1097_str
-_BPMSG1097_str:
-	.pasciz "POWER SUPPLIES OFF"
-
 	; BPMSG1098
 	.section .text.BPMSG1098, code
 	.global _BPMSG1098_str
@@ -267,12 +255,6 @@ _BPMSG1100_str:
 	.global _BPMSG1101_str
 _BPMSG1101_str:
 	.pasciz "WRITE: "
-
-	; BPMSG1102
-	.section .text.BPMSG1102, code
-	.global _BPMSG1102_str
-_BPMSG1102_str:
-	.pasciz "READ: "
 
 	; BPMSG1103
 	.section .text.BPMSG1103, code
@@ -405,12 +387,6 @@ _BPMSG1127_str:
 	.global _BPMSG1128_str
 _BPMSG1128_str:
 	.pasciz "Display format set"
-
-	; BPMSG1133
-	.section .text.BPMSG1133, code
-	.global _BPMSG1133_str
-_BPMSG1133_str:
-	.pasciz "Set serial port speed: (bps)\r\n 1. 300\r\n 2. 1200\r\n 3. 2400\r\n 4. 4800\r\n 5. 9600\r\n 6. 19200\r\n 7. 38400\r\n 8. 57600\r\n 9. 115200\r\n10. BRG raw value"
 
 	; BPMSG1134
 	.section .text.BPMSG1134, code
@@ -580,84 +556,6 @@ _BPMSG1185_str:
 _BPMSG1186_str:
 	.pasciz " FAIL"
 
-	; BPMSG1194
-	.section .text.BPMSG1194, code
-	.global _BPMSG1194_str
-_BPMSG1194_str:
-	.pasciz "-p "
-
-	; BPMSG1195
-	.section .text.BPMSG1195, code
-	.global _BPMSG1195_str
-_BPMSG1195_str:
-	.pasciz "-f "
-
-	; BPMSG1196
-	.section .text.BPMSG1196, code
-	.global _BPMSG1196_str
-_BPMSG1196_str:
-	.pasciz "*Bytes dropped*"
-
-	; BPMSG1197
-	.section .text.BPMSG1197, code
-	.global _BPMSG1197_str
-_BPMSG1197_str:
-	.pasciz "FAILED, NO DATA"
-
-	; BPMSG1199
-	.section .text.BPMSG1199, code
-	.global _BPMSG1199_str
-_BPMSG1199_str:
-	.pasciz "Data bits and parity:\r\n 1. 8, NONE *default \r\n 2. 8, EVEN \r\n 3. 8, ODD \r\n 4. 9, NONE"
-
-	; BPMSG1200
-	.section .text.BPMSG1200, code
-	.global _BPMSG1200_str
-_BPMSG1200_str:
-	.pasciz "Stop bits:\r\n 1. 1 *default\r\n 2. 2"
-
-	; BPMSG1201
-	.section .text.BPMSG1201, code
-	.global _BPMSG1201_str
-_BPMSG1201_str:
-	.pasciz "Receive polarity:\r\n 1. Idle 1 *default\r\n 2. Idle 0"
-
-	; BPMSG1202
-	.section .text.BPMSG1202, code
-	.global _BPMSG1202_str
-_BPMSG1202_str:
-	.pasciz "UART (spd brg dbp sb rxp hiz)=( "
-
-	; BPMSG1203
-	.section .text.BPMSG1203, code
-	.global _BPMSG1203_str
-_BPMSG1203_str:
-	.pasciz " 0.Macro menu\r\n 1.Transparent bridge\r\n 2.Live monitor\r\n 3.Bridge with flow control\n\r 4.Auto Baud Detection"
-
-	; BPMSG1204
-	.section .text.BPMSG1204, code
-	.global _BPMSG1204_str
-_BPMSG1204_str:
-	.pasciz "UART bridge"
-
-	; BPMSG1206
-	.section .text.BPMSG1206, code
-	.global _BPMSG1206_str
-_BPMSG1206_str:
-	.pasciz "Raw UART input"
-
-	; BPMSG1207
-	.section .text.BPMSG1207, code
-	.global _BPMSG1207_str
-_BPMSG1207_str:
-	.pasciz "UART LIVE DISPLAY, } TO STOP"
-
-	; BPMSG1208
-	.section .text.BPMSG1208, code
-	.global _BPMSG1208_str
-_BPMSG1208_str:
-	.pasciz "LIVE DISPLAY STOPPED"
-
 	; BPMSG1209
 	.section .text.BPMSG1209, code
 	.global _BPMSG1209_str
@@ -766,12 +664,6 @@ _BPMSG1234_str:
 _BPMSG1245_str:
 	.pasciz " autorange "
 
-	; BPMSG1248
-	.section .text.BPMSG1248, code
-	.global _BPMSG1248_str
-_BPMSG1248_str:
-	.pasciz "Raw value for BRG (MIDI=127)"
-
 	; BPMSG1251
 	.section .text.BPMSG1251, code
 	.global _BPMSG1251_str
@@ -795,42 +687,6 @@ _BPMSG1254_str:
 	.global _BPMSG1255_str
 _BPMSG1255_str:
 	.pasciz "Servo active"
-
-	; BPMSG1280
-	.section .text.BPMSG1280, code
-	.global _BPMSG1280_str
-_BPMSG1280_str:
-	.pasciz "Waiting activity..."
-
-	; BPMSG1281
-	.section .text.BPMSG1281, code
-	.global _BPMSG1281_str
-_BPMSG1281_str:
-	.pasciz "** Early Exit!"
-
-	; BPMSG1282
-	.section .text.BPMSG1282, code
-	.global _BPMSG1282_str
-_BPMSG1282_str:
-	.pasciz "**Baud>16m: BP Cannot measure > 16000000, Done."
-
-	; BPMSG1283
-	.section .text.BPMSG1283, code
-	.global _BPMSG1283_str
-_BPMSG1283_str:
-	.pasciz "\n\rCalculated: \t"
-
-	; BPMSG1284
-	.section .text.BPMSG1284, code
-	.global _BPMSG1284_str
-_BPMSG1284_str:
-	.pasciz "\n\rEstimated:  \t"
-
-	; BPMSG1285
-	.section .text.BPMSG1285, code
-	.global _BPMSG1285_str
-_BPMSG1285_str:
-	.pasciz " bps"
 
 	; HLP1000
 	.section .text.HLP1000, code
@@ -1174,6 +1030,12 @@ _MSG_CHIP_REVISION_ID_END_4_str:
 _MSG_CHIP_REVISION_UNKNOWN_str:
 	.pasciz "UNK"
 
+	; MSG_CLEAR_LINE_WITH_CR
+	.section .text.MSG_CLEAR_LINE_WITH_CR, code
+	.global _MSG_CLEAR_LINE_WITH_CR_str
+_MSG_CLEAR_LINE_WITH_CR_str:
+	.pasciz <27>, "[2K\r"
+
 	; MSG_CLUTCH_DISENGAGED
 	.section .text.MSG_CLUTCH_DISENGAGED, code
 	.global _MSG_CLUTCH_DISENGAGED_str
@@ -1191,6 +1053,30 @@ _MSG_CLUTCH_ENGAGED_str:
 	.global _MSG_COMMAND_HAS_NO_EFFECT_str
 _MSG_COMMAND_HAS_NO_EFFECT_str:
 	.pasciz "ERROR: command has no effect here"
+
+	; MSG_CURSOR_LEFT
+	.section .text.MSG_CURSOR_LEFT, code
+	.global _MSG_CURSOR_LEFT_str
+_MSG_CURSOR_LEFT_str:
+	.pasciz <27>, "[D"
+
+	; MSG_CURSOR_LEFT_TWO
+	.section .text.MSG_CURSOR_LEFT_TWO, code
+	.global _MSG_CURSOR_LEFT_TWO_str
+_MSG_CURSOR_LEFT_TWO_str:
+	.pasciz <27>, "[2D"
+
+	; MSG_CURSOR_RIGHT
+	.section .text.MSG_CURSOR_RIGHT, code
+	.global _MSG_CURSOR_RIGHT_str
+_MSG_CURSOR_RIGHT_str:
+	.pasciz <27>, "[C"
+
+	; MSG_DESTRUCTIVE_BACKSPACE
+	.section .text.MSG_DESTRUCTIVE_BACKSPACE, code
+	.global _MSG_DESTRUCTIVE_BACKSPACE_str
+_MSG_DESTRUCTIVE_BACKSPACE_str:
+	.pasciz <8>, " ", <8>
 
 	; MSG_FINISH_SETUP_PROMPT
 	.section .text.MSG_FINISH_SETUP_PROMPT, code
@@ -1402,6 +1288,18 @@ _MSG_PIC_UNKNOWN_MODE_str:
 _MSG_PIN_OUTPUT_TYPE_PROMPT_str:
 	.pasciz "Select output type:\r\n 1. Open drain (H=Hi-Z, L=GND)\r\n 2. Normal (H=3.3V, L=GND)"
 
+	; MSG_POWER_SUPPLIES_OFF
+	.section .text.MSG_POWER_SUPPLIES_OFF, code
+	.global _MSG_POWER_SUPPLIES_OFF_str
+_MSG_POWER_SUPPLIES_OFF_str:
+	.pasciz "POWER SUPPLIES OFF"
+
+	; MSG_POWER_SUPPLIES_ON
+	.section .text.MSG_POWER_SUPPLIES_ON, code
+	.global _MSG_POWER_SUPPLIES_ON_str
+_MSG_POWER_SUPPLIES_ON_str:
+	.pasciz "POWER SUPPLIES ON"
+
 	; MSG_PWM_FREQUENCY_TOO_LOW
 	.section .text.MSG_PWM_FREQUENCY_TOO_LOW, code
 	.global _MSG_PWM_FREQUENCY_TOO_LOW_str
@@ -1540,6 +1438,12 @@ _MSG_RAW_BRG_VALUE_INPUT_str:
 _MSG_RAW_MODE_IDENTIFIER_str:
 	.pasciz "RAW1"
 
+	; MSG_READ_HEADER
+	.section .text.MSG_READ_HEADER, code
+	.global _MSG_READ_HEADER_str
+_MSG_READ_HEADER_str:
+	.pasciz "READ: "
+
 	; MSG_SNIFFER_MESSAGE
 	.section .text.MSG_SNIFFER_MESSAGE, code
 	.global _MSG_SNIFFER_MESSAGE_str
@@ -1624,11 +1528,113 @@ _MSG_SPI_SAMPLE_PROMPT_str:
 _MSG_SPI_SPEED_PROMPT_str:
 	.pasciz "Set speed:\r\n 1.  30KHz\r\n 2. 125KHz\r\n 3. 250KHz\r\n 4.   1MHz\r\n 5.  50KHz\r\n 6. 1.3MHz\r\n 7.   2MHz\r\n 8. 2.6MHz\r\n 9. 3.2MHz\r\n10.   4MHz\r\n11. 5.3MHz\r\n12.   8MHz"
 
+	; MSG_UART_BAUD_CALCULATED
+	.section .text.MSG_UART_BAUD_CALCULATED, code
+	.global _MSG_UART_BAUD_CALCULATED_str
+_MSG_UART_BAUD_CALCULATED_str:
+	.pasciz "\n\rCalculated: \t"
+
+	; MSG_UART_BAUD_ESTIMATED
+	.section .text.MSG_UART_BAUD_ESTIMATED, code
+	.global _MSG_UART_BAUD_ESTIMATED_str
+_MSG_UART_BAUD_ESTIMATED_str:
+	.pasciz "\n\rEstimated:  \t"
+
+	; MSG_UART_BAUD_OVERFLOW
+	.section .text.MSG_UART_BAUD_OVERFLOW, code
+	.global _MSG_UART_BAUD_OVERFLOW_str
+_MSG_UART_BAUD_OVERFLOW_str:
+	.pasciz "** Baud>16m: The BP cannot measure above 16000000, Done."
+
+	; MSG_UART_BITS_PARITY_PROMPT
+	.section .text.MSG_UART_BITS_PARITY_PROMPT, code
+	.global _MSG_UART_BITS_PARITY_PROMPT_str
+_MSG_UART_BITS_PARITY_PROMPT_str:
+	.pasciz "Data bits and parity:\r\n 1. 8, NONE *default \r\n 2. 8, EVEN \r\n 3. 8, ODD \r\n 4. 9, NONE"
+
+	; MSG_UART_BITS_STOP_PROMPT
+	.section .text.MSG_UART_BITS_STOP_PROMPT, code
+	.global _MSG_UART_BITS_STOP_PROMPT_str
+_MSG_UART_BITS_STOP_PROMPT_str:
+	.pasciz "Stop bits:\r\n 1. 1 *default\r\n 2. 2"
+
+	; MSG_UART_BPS_MARKER
+	.section .text.MSG_UART_BPS_MARKER, code
+	.global _MSG_UART_BPS_MARKER_str
+_MSG_UART_BPS_MARKER_str:
+	.pasciz " bps"
+
+	; MSG_UART_BRIDGE
+	.section .text.MSG_UART_BRIDGE, code
+	.global _MSG_UART_BRIDGE_str
+_MSG_UART_BRIDGE_str:
+	.pasciz "UART bridge"
+
+	; MSG_UART_BRIDGE_EXIT
+	.section .text.MSG_UART_BRIDGE_EXIT, code
+	.global _MSG_UART_BRIDGE_EXIT_str
+_MSG_UART_BRIDGE_EXIT_str:
+	.pasciz "Reset to exit"
+
+	; MSG_UART_EARLY_EXIT
+	.section .text.MSG_UART_EARLY_EXIT, code
+	.global _MSG_UART_EARLY_EXIT_str
+_MSG_UART_EARLY_EXIT_str:
+	.pasciz "** Early Exit!"
+
+	; MSG_UART_FAILED_NO_DATA
+	.section .text.MSG_UART_FAILED_NO_DATA, code
+	.global _MSG_UART_FAILED_NO_DATA_str
+_MSG_UART_FAILED_NO_DATA_str:
+	.pasciz "FAILED, NO DATA"
+
+	; MSG_UART_FRAMING_ERROR
+	.section .text.MSG_UART_FRAMING_ERROR, code
+	.global _MSG_UART_FRAMING_ERROR_str
+_MSG_UART_FRAMING_ERROR_str:
+	.pasciz "-f "
+
+	; MSG_UART_LIVE_DISPLAY_START
+	.section .text.MSG_UART_LIVE_DISPLAY_START, code
+	.global _MSG_UART_LIVE_DISPLAY_START_str
+_MSG_UART_LIVE_DISPLAY_START_str:
+	.pasciz "UART LIVE DISPLAY, } TO STOP"
+
+	; MSG_UART_LIVE_DISPLAY_STOP
+	.section .text.MSG_UART_LIVE_DISPLAY_STOP, code
+	.global _MSG_UART_LIVE_DISPLAY_STOP_str
+_MSG_UART_LIVE_DISPLAY_STOP_str:
+	.pasciz "LIVE DISPLAY STOPPED"
+
+	; MSG_UART_MACRO_MENU
+	.section .text.MSG_UART_MACRO_MENU, code
+	.global _MSG_UART_MACRO_MENU_str
+_MSG_UART_MACRO_MENU_str:
+	.pasciz " 0.Macro menu\r\n 1.Transparent bridge\r\n 2.Live monitor\r\n 3.Bridge with flow control\n\r 4.Auto Baud Detection"
+
+	; MSG_UART_MODE_HEADER
+	.section .text.MSG_UART_MODE_HEADER, code
+	.global _MSG_UART_MODE_HEADER_str
+_MSG_UART_MODE_HEADER_str:
+	.pasciz "UART (spd brg dbp sb rxp hiz)=( "
+
 	; MSG_UART_MODE_IDENTIFIER
 	.section .text.MSG_UART_MODE_IDENTIFIER, code
 	.global _MSG_UART_MODE_IDENTIFIER_str
 _MSG_UART_MODE_IDENTIFIER_str:
 	.pasciz "ART1"
+
+	; MSG_UART_OVERRUN_ERROR
+	.section .text.MSG_UART_OVERRUN_ERROR, code
+	.global _MSG_UART_OVERRUN_ERROR_str
+_MSG_UART_OVERRUN_ERROR_str:
+	.pasciz "*Bytes dropped*"
+
+	; MSG_UART_PARITY_ERROR
+	.section .text.MSG_UART_PARITY_ERROR, code
+	.global _MSG_UART_PARITY_ERROR_str
+_MSG_UART_PARITY_ERROR_str:
+	.pasciz "-p "
 
 	; MSG_UART_PINS_STATE
 	.section .text.MSG_UART_PINS_STATE, code
@@ -1636,17 +1642,41 @@ _MSG_UART_MODE_IDENTIFIER_str:
 _MSG_UART_PINS_STATE_str:
 	.pasciz "-\tTxD\t-\tRxD"
 
+	; MSG_UART_POLARITY_PROMPT
+	.section .text.MSG_UART_POLARITY_PROMPT, code
+	.global _MSG_UART_POLARITY_PROMPT_str
+_MSG_UART_POLARITY_PROMPT_str:
+	.pasciz "Receive polarity:\r\n 1. Idle 1 *default\r\n 2. Idle 0"
+
 	; MSG_UART_POSSIBLE_OVERFLOW
 	.section .text.MSG_UART_POSSIBLE_OVERFLOW, code
 	.global _MSG_UART_POSSIBLE_OVERFLOW_str
 _MSG_UART_POSSIBLE_OVERFLOW_str:
 	.pasciz "WARNING: Possible buffer overflow"
 
-	; MSG_UART_RESET_TO_EXIT
-	.section .text.MSG_UART_RESET_TO_EXIT, code
-	.global _MSG_UART_RESET_TO_EXIT_str
-_MSG_UART_RESET_TO_EXIT_str:
-	.pasciz "Reset to exit"
+	; MSG_UART_RAW_BRG_PROMPT
+	.section .text.MSG_UART_RAW_BRG_PROMPT, code
+	.global _MSG_UART_RAW_BRG_PROMPT_str
+_MSG_UART_RAW_BRG_PROMPT_str:
+	.pasciz "Raw value for BRG (MIDI=127)"
+
+	; MSG_UART_RAW_UART_INPUT
+	.section .text.MSG_UART_RAW_UART_INPUT, code
+	.global _MSG_UART_RAW_UART_INPUT_str
+_MSG_UART_RAW_UART_INPUT_str:
+	.pasciz "Raw UART input"
+
+	; MSG_UART_SET_PORT_SPEED
+	.section .text.MSG_UART_SET_PORT_SPEED, code
+	.global _MSG_UART_SET_PORT_SPEED_str
+_MSG_UART_SET_PORT_SPEED_str:
+	.pasciz "Set serial port speed: (bps)\r\n 1. 300\r\n 2. 1200\r\n 3. 2400\r\n 4. 4800\r\n 5. 9600\r\n 6. 19200\r\n 7. 38400\r\n 8. 57600\r\n 9. 115200\r\n10. BRG raw value"
+
+	; MSG_UART_WAITING_ACTIVITY
+	.section .text.MSG_UART_WAITING_ACTIVITY, code
+	.global _MSG_UART_WAITING_ACTIVITY_str
+_MSG_UART_WAITING_ACTIVITY_str:
+	.pasciz "Waiting activity..."
 
 	; MSG_UNKNOWN_MACRO_ERROR
 	.section .text.MSG_UNKNOWN_MACRO_ERROR, code

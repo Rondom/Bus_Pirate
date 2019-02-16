@@ -126,6 +126,34 @@ static void clear_mode_configuration(void);
 static void print_decimal(const uint32_t value, const uint32_t denominator,
                           const uint8_t digits);
 
+#ifdef BP_USE_HARDWARE_DELAY_TIMER
+
+/**
+ * @brief Pauses execution for the given amount of microseconds.
+ *
+ * Unlike delay_short, this function handles delays longer than 16384
+ * microseconds.
+ *
+ * @param[in] microseconds the amount of microseconds to wait.
+ *
+ * @see delay_short
+ */
+static void delay_long(uint32_t microseconds);
+
+/**
+ * @brief Pauses execution for the given amount of microseconds.
+ *
+ * This function can delay execution up to 16384 microseconds.  For longer
+ * delays, use delay_long.
+ *
+ * @param[in] microseconds the amount of microseconds to wait.
+ *
+ * @see delay_long
+ */
+static inline void delay_short(uint16_t microseconds);
+
+#endif /* BP_USE_HARDWARE_DELAY_TIMER */
+
 void clear_mode_configuration(void) {
   mode_configuration.high_impedance = OFF;
   mode_configuration.speed = 0;
@@ -441,9 +469,9 @@ void print_decimal(const uint32_t value, const uint32_t denominator,
   number = value;
   divisor = denominator;
 
-  if (!value){
-      user_serial_transmit_character('0');
-      return;
+  if (!value) {
+    user_serial_transmit_character('0');
+    return;
   }
 
   for (digit = 0; digit < digits; digit++) {
@@ -522,6 +550,87 @@ uint16_t bp_read_from_flash(const uint16_t page, const uint16_t address) {
 
   return word;
 }
+
+void bp_initialise_delay_timer(void) {
+#ifdef BP_USE_HARDWARE_DELAY_TIMER
+
+  /*
+   * T1CON
+   *
+   * MSB
+   * 1-0------010-0-
+   * | |      ||| |
+   * | |      ||| +--- TCS:   External clock from pin.
+   * | |      ||+----- T32:   TIMER1 is not bound with TIMER2 for 32 bit mode.
+   * | |      ++------ TCKPS: 1:8 Prescaler.
+   * | +-------------- TSIDL: Continue module operation in idle mode.
+   * +---------------- TON:   Timer OFF.
+   */
+  T1CON = 0x0010;
+
+  /* Reset Timer #1 counter. */
+  TMR1 = 0x0000;
+
+  /* Free-running Timer #1. */
+  PR1 = 0xFFFF;
+
+  /* Start Timer #1. */
+  T1CONbits.TON = ON;
+
+#endif /* BP_USE_HARDWARE_DELAY_TIMER */
+}
+
+#ifdef BP_USE_HARDWARE_DELAY_TIMER
+
+void delay_long(uint32_t microseconds) {
+  if (microseconds == 0) {
+    return;
+  }
+
+  uint32_t ticks = (microseconds << 1) - 1;
+  uint16_t timer_start = TMR1;
+
+  for (;;) {
+    uint16_t timer_value = TMR1;
+    uint16_t ticks_delta = timer_value - timer_start;
+
+    if ((uint32_t)ticks_delta >= ticks) {
+      return;
+    }
+
+    if (ticks_delta >= 0x7FFF) {
+      ticks -= (uint32_t)ticks_delta;
+      timer_start = timer_value;
+    }
+  }
+}
+
+void delay_short(uint16_t microseconds) {
+  if (microseconds == 0) {
+    return;
+  }
+
+  uint16_t ticks_delta;
+  uint16_t ticks = (microseconds << 1) - 1;
+  uint16_t timer_start = TMR1;
+
+  do {
+    ticks_delta = TMR1 - timer_start;
+  } while (ticks_delta < ticks);
+}
+
+void bp_delay_ms(uint16_t milliseconds) { delay_long(milliseconds * 1000); }
+
+void bp_delay_us(uint16_t microseconds) {
+  if (microseconds < 0x3FFF) {
+    delay_short(microseconds);
+    return;
+  }
+
+  delay_long(microseconds);
+}
+
+#endif /* BP_USE_HARDWARE_DELAY_TIMER */
 
 #ifdef BUSPIRATEV3
 
@@ -798,3 +907,15 @@ void user_serial_set_baud_rate(const uint16_t rate __attribute__((unused))) {}
 bool user_serial_transmit_done(void) { return YES; }
 
 #endif /* BUSPIRATEV4 */
+
+uint16_t user_serial_read_big_endian_word(void) {
+  uint16_t value = ((uint16_t)user_serial_read_byte()) << 8;
+
+  return value | ((uint16_t)user_serial_read_byte());
+}
+
+uint32_t user_serial_read_big_endian_long_word(void) {
+  uint32_t value = ((uint32_t)user_serial_read_big_endian_word()) << 16;
+
+  return value | ((uint32_t)user_serial_read_big_endian_word());
+}

@@ -1,6 +1,6 @@
 /*
  * This file is part of the Bus Pirate project
- * (http://code.google.com/p/the-bus-pirate/).
+ * (https://github.com/BusPirate/Bus_Pirate/).
  *
  * Written and maintained by the Bus Pirate project.
  *
@@ -98,7 +98,7 @@ extern mode_configuration_t mode_configuration;
 extern command_t last_command;
 
 /**
- * Handles a pending acknowledgment by sending either an ACK or a NACK on the
+ * Handles a pending acknowledgement by sending either an ACK or a NACK on the
  * bus.
  *
  * @param[in] bus_bit false for sending an ACK, true for sending a NACK.
@@ -114,12 +114,10 @@ static void handle_pending_ack(const bool bus_bit);
  * Frequency constants for the hardware I2C baud rate generator circuitry.
  */
 static const uint8_t HARDWARE_I2C_BRG_SPEEDS[] = {
-    /** 100 kHz. */
-    157,
-    /** 400 kHz. */
-    37,
-    /** 1000 kHz. */
-    13};
+    157, /* 100 kHz. */
+    37,  /* 400 kHz. */
+    13,  /* 1000 kHz. */
+};
 
 /**
  * Performs hardware initialisation on the chosen hardware I2C interface.
@@ -240,7 +238,7 @@ unsigned int i2c_write(unsigned int c) {
 }
 
 void i2c_start(void) {
-  /* Reset the bus state if an acknowledgment is pending. */
+  /* Reset the bus state if an acknowledgement is pending. */
 
   if (i2c_state.acknowledgment_pending) {
     MSG_NACK;
@@ -497,20 +495,25 @@ void i2c_macro(unsigned int c) {
 
     i2c_state.to_eeprom = true;
 
-    /* 7-bits slave address. */
-    I2C1CONbits.A10M = OFF;
-
-    /* Enable clock stretching. */
-    I2C1CONbits.SCLREL = OFF;
+    /*
+     * I2C1CON: I2C1 CONTROL REGISTER
+     *
+     * MSB
+     * x-x0x0x0xxxxxxxx
+     *    | | |
+     *    | | +------------ SMEN:  Disable SMBus support.
+     *    | +-------------- A10M:  Use 7-bit slave addresses.
+     *    +---------------- SCREL: Enable clock stretching.
+     *
+     */
+    I2C1CON &=
+        ~(_I2C1CON_A10M_MASK | _I2C1CON_SCLREL_MASK | _I2C1CON_SMEN_MASK);
 
     /* General call address. */
     I2C1ADD = 0;
 
     /* Do not mask address bits. */
     I2C1MSK = 0;
-
-    /* Disable SMBus. */
-    I2C1CONbits.SMEN = OFF;
 
     /* Set the I2C baud rate generator speed. */
     I2C1BRG = HARDWARE_I2C_BRG_SPEEDS[mode_configuration.speed];
@@ -590,8 +593,11 @@ bool hardware_i2c_get_ack(void) {
   }
 #endif /* BUSPIRATEV4 */
 
-  /* Return the acknowledge status bit for the EEPROM v4 I2C bus or for the external v3 I2C bus. */
-  
+/*
+ * Return the acknowledge status bit for the EEPROM v4 I2C bus or for the
+ * external v3 I2C bus.
+ */
+
 #if defined(BUSPIRATEV3) && !defined(BPV3_IS_REV_B4_OR_LATER)
 
   /*
@@ -711,20 +717,24 @@ uint8_t hardware_i2c_read(void) {
 void hardware_i2c_setup(void) {
 #if defined(BUSPIRATEV4)
 
-  /* 7-bits slave address. */
-  I2C3CONbits.A10M = OFF;
-
-  /* Enable clock stretching. */
-  I2C3CONbits.SCLREL = OFF;
+  /*
+   * I2C3CON: I2C3 CONTROL REGISTER
+   *
+   * MSB
+   * x-x0x0x0xxxxxxxx
+   *    | | |
+   *    | | +------------ SMEN:  Disable SMBus support.
+   *    | +-------------- A10M:  Use 7-bit slave addresses.
+   *    +---------------- SCREL: Enable clock stretching.
+   *
+   */
+  I2C3CON &= ~(_I2C3CON_A10M_MASK | _I2C3CON_SCLREL_MASK | _I2C3CON_SMEN_MASK);
 
   /* General call address. */
   I2C3ADD = 0;
 
   /* Do not mask address bits. */
   I2C3MSK = 0;
-
-  /* Disable SMBus. */
-  I2C3CONbits.SMEN = OFF;
 
   /* Set the I2C baud rate generator speed. */
   I2C3BRG = HARDWARE_I2C_BRG_SPEEDS[mode_configuration.speed];
@@ -743,14 +753,18 @@ void hardware_i2c_setup(void) {
   /* Set the I2C baud rate generator speed. */
   I2C1BRG = HARDWARE_I2C_BRG_SPEEDS[mode_configuration.speed];
 
-  /* 7-bits slave address. */
-  I2C1CONbits.A10M = OFF;
-
-  /* Enable clock stretching. */
-  I2C1CONbits.SCLREL = OFF;
-
-  /* Disable SMBus. */
-  I2C1CONbits.SMEN = OFF;
+  /*
+   * I2C1CON: I2C1 CONTROL REGISTER
+   *
+   * MSB
+   * x-x0x0x0xxxxxxxx
+   *    | | |
+   *    | | +------------ SMEN:  Disable SMBus support.
+   *    | +-------------- A10M:  Use 7-bit slave addresses.
+   *    +---------------- SCREL: Enable clock stretching.
+   *
+   */
+  I2C1CON &= ~(_I2C1CON_A10M_MASK | _I2C1CON_SCLREL_MASK | _I2C1CON_SMEN_MASK);
 
 #if !defined(BPV3_IS_REV_B4_OR_LATER)
 
@@ -797,19 +811,6 @@ void hardware_i2c_setup(void) {
 #endif /* BP_I2C_USE_HW_BUS */
 
 void i2c_sniffer(bool interactive_mode) {
-  bool new_sda;
-  bool old_sda;
-  bool new_scl;
-  bool old_scl;
-
-  bool collect_data;
-  uint8_t data_bits;
-  uint8_t data_value;
-
-  collect_data = false;
-  data_bits = 0;
-  data_value = 0;
-
   /* Setup UART ringbuffer. */
   user_serial_ringbuffer_setup();
 
@@ -825,10 +826,14 @@ void i2c_sniffer(bool interactive_mode) {
   /* Clear the change interrupt flag. */
   IFS1bits.CNIF = OFF;
 
-  old_sda = SDA;
-  old_scl = SCL;
-  new_sda = old_sda;
-  new_scl = old_scl;
+  bool old_sda = SDA;
+  bool old_scl = SCL;
+  bool new_sda = old_sda;
+  bool new_scl = old_scl;
+
+  bool collect_data = false;
+  uint8_t data_bits = 0;
+  uint8_t data_value = 0;
 
   for (;;) {
     if (!IFS1bits.CNIF) {
@@ -1100,46 +1105,67 @@ void binary_io_enter_i2c_mode(void) {
 }
 
 bool i2c_write_then_read(void) {
-  size_t bytes_to_read;
-  size_t bytes_to_write;
-  size_t index;
-
   /* Read the amount of bytes to write. */
-
-  bytes_to_write = user_serial_read_byte();
-  bytes_to_write <<= 8;
-  bytes_to_write |= user_serial_read_byte();
-
+  size_t bytes_to_write = user_serial_read_big_endian_word();
+  
   /* Read the amount of bytes to read. */
+  size_t bytes_to_read = user_serial_read_big_endian_word();
 
-  bytes_to_read = user_serial_read_byte();
-  bytes_to_read <<= 8;
-  bytes_to_read |= user_serial_read_byte();
+#ifndef BP_I2C_ENABLE_STREAMING_WRITE
+  /* Make sure data fits in the internal buffer. */
+  if (bytes_to_write > BP_TERMINAL_BUFFER_SIZE) {
+    return false;
+  }
+#endif /* !BP_I2C_ENABLE_STREAMING_WRITE */
 
-  /* Check lengths. */
+#ifndef BP_I2C_ENABLE_STREAMING_READ
+  /* Make sure data fits in the internal buffer. */
+  if (bytes_to_write > BP_TERMINAL_BUFFER_SIZE) {
+    return false;
+  }
+#endif /* !BP_I2C_ENABLE_STREAMING_READ */
 
-  if ((bytes_to_write > BP_TERMINAL_BUFFER_SIZE) ||
-      (bytes_to_read > BP_TERMINAL_BUFFER_SIZE)) {
+  if ((bytes_to_write == 0) && (bytes_to_read == 0)) {
     return false;
   }
 
-  /* Read payload. */
+  uint8_t i2c_address = 0;
 
-  for (index = 0; index < bytes_to_write; index++) {
+#ifdef BP_I2C_ENABLE_STREAMING_WRITE
+
+  /* Read I2C address. */
+  i2c_address = user_serial_read_byte();
+
+  /* Start streaming. */
+  bitbang_i2c_start(BITBANG_I2C_START_ONE_SHOT);
+
+  /* Stream data from the serial port. */
+  bitbang_write_value(i2c_address);
+
+  for (size_t counter = 1; counter < bytes_to_write; counter++) {
+    bitbang_write_value(user_serial_read_byte());
+
+    if (bitbang_read_bit() == HIGH) {
+      /* No ACK read on the bus, bailing out. */
+      return false;
+    }
+  }
+
+#else
+
+  /* Read payload. */
+  for (size_t index = 0; index < bytes_to_write; index++) {
     bus_pirate_configuration.terminal_input[index] = user_serial_read_byte();
   }
 
   /* Get I2C address. */
-
-  uint8_t i2c_address = bus_pirate_configuration.terminal_input[0];
+  i2c_address = bus_pirate_configuration.terminal_input[0];
 
   /* Signal write start. */
-
   bitbang_i2c_start(BITBANG_I2C_START_ONE_SHOT);
 
   /* Write the payload to the I2C bus. */
-
-  for (index = 0; index < bytes_to_write; index++) {
+  for (size_t index = 0; index < bytes_to_write; index++) {
     bitbang_write_value(bus_pirate_configuration.terminal_input[index]);
 
     if (bitbang_read_bit() == HIGH) {
@@ -1148,14 +1174,13 @@ bool i2c_write_then_read(void) {
     }
   }
 
+#endif /* BP_I2C_ENABLE_STREAMING_WRITE */
+
   if ((bytes_to_read > 0) && (bytes_to_write > 1)) {
-
     /* Send a restart signal on the I2C bus. */
-
     bitbang_i2c_start(BITBANG_I2C_RESTART);
 
     /* Send the I2C address. */
-
     bitbang_write_value(i2c_address | 0x01);
 
     if (bitbang_read_bit() == HIGH) {
@@ -1165,33 +1190,44 @@ bool i2c_write_then_read(void) {
   }
 
   /* Read the rest of the data. */
-
   bytes_to_write = bytes_to_read - 1;
 
-  for (index = 0; index < bytes_to_read; index++) {
-    /* Read the byte from the I2C bus. */
+#ifdef BP_I2C_ENABLE_STREAMING_READ
 
+  /* Start streaming data. */
+  REPORT_IO_SUCCESS();
+
+  for (size_t counter = 0; counter < bytes_to_read; counter++) {
+    /* Read byte from the I2C bus. */
+    user_serial_transmit_character(bitbang_read_value());
+    
+    /* Acknowledge read operation. */
+    bitbang_write_bit(counter >= bytes_to_write ? HIGH : LOW);
+  }
+
+  /* Stop the I2C bus. */
+  bitbang_i2c_stop();
+
+#else
+
+  for (size_t index = 0; index < bytes_to_read; index++) {
+    /* Read the byte from the I2C bus. */
     bus_pirate_configuration.terminal_input[index] = bitbang_read_value();
 
     /* Report ACK or NACK depending on the length. */
-
     bitbang_write_bit(index >= bytes_to_write ? HIGH : LOW);
   }
 
   /* Stop the I2C bus operations. */
-
   bitbang_i2c_stop();
 
   /* Report operation status. */
-
   REPORT_IO_SUCCESS();
 
   /* And send the I2C data over to the UART. */
+  bp_write_buffer(&bus_pirate_configuration.terminal_input[0], bytes_to_read);
 
-  for (index = 0; index < bytes_to_read; index++) {
-    user_serial_transmit_character(
-        bus_pirate_configuration.terminal_input[index]);
-  }
+#endif /* BP_I2C_ENABLE_STREAMING_READ */
 
   return true;
 }

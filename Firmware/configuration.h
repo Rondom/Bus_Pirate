@@ -452,6 +452,16 @@
  */
 #define BP_SPI_ENABLE_AVR_EXTENDED_COMMANDS
 
+/**
+ * Enable experimental UART streaming read support.
+ */
+#undef BP_SPI_ENABLE_STREAMING_READ
+
+/**
+ * Enable experimental UART streaming write support.
+ */
+#undef BP_SPI_ENABLE_STREAMING_WRITE
+
 #endif /* BP_ENABLE_SPI_SUPPORT */
 
 /* SMPS module configuration definitions. */
@@ -569,5 +579,10 @@
  * @todo Make sure that no hard-coded buffer sizes are present.
  */
 #define BP_TERMINAL_BUFFER_SIZE 4096
+
+/**
+ * Use a hardware timer to calculate delays instead of a NOP-based busy loop.
+ */
+#define BP_USE_HARDWARE_DELAY_TIMER
 
 #endif /* !BP_CONFIGURATION_H */

@@ -1,6 +1,6 @@
 /*
  * This file is part of the Bus Pirate project
- * (http://code.google.com/p/the-bus-pirate/).
+ * (https://github.com/BusPirate/Bus_Pirate/).
  *
  * Written and maintained by the Bus Pirate project.
  *
@@ -146,6 +146,31 @@ static void spi_sniffer(bool trigger, bool terminal_mode);
  */
 static void engage_spi_cs(bool write_with_read);
 
+/**
+ * Performs the bulk of the I/O work for binary-mode commands involving SPI
+ * reads and writes.
+ *
+ * @param[in] engage_cs flag indicating whether CS must be held down when
+ * performing an SPI write operation.
+ */
+static void spi_read_write_io(const bool engage_cs);
+
+/**
+ * Writes to the SPI bus the data read from the user-facing serial port.
+ *
+ * @param[in] bytes_to_write how many bytes should be read from the serial port
+ * and written to the SPI bus.
+ */
+static void spi_write_from_uart(const size_t bytes_to_write);
+
+/**
+ * Writes to the user-facing serial port the data read from the SPI bus.
+ *
+ * @param[in] bytes_to_read how many bytes should be read from the SPI bus
+ * and written to the user-facing serial port.
+ */
+static void spi_read_to_uart(const size_t bytes_to_read);
+
 #ifdef BP_SPI_ENABLE_AVR_EXTENDED_COMMANDS
 
 /**
@@ -168,7 +193,14 @@ static void engage_spi_cs(bool write_with_read);
  */
 #define BINARY_IO_SPI_AVR_SUPPORT_VERSION 0x0001
 
+/**
+ * AVR Fetch data command low byte.
+ */
 #define AVR_FETCH_LOW_BYTE_COMMAND 0x20
+
+/**
+ * AVR Fetch data command high byte.
+ */
 #define AVR_FETCH_HIGH_BYTE_COMMAND 0x28
 
 /**
@@ -259,9 +291,7 @@ void spi_stop(void) {
 inline uint16_t spi_read(void) { return spi_write_byte(0xFF); }
 
 uint16_t spi_write(const uint16_t value) {
-  uint8_t data;
-
-  data = spi_write_byte(value);
+  uint8_t data = spi_write_byte(value);
   return mode_configuration.write_with_read ? data : 0;
 }
 
@@ -416,13 +446,13 @@ void spi_setup(const uint8_t spi_speed) {
 
   /* Set SPI to open drain if high impedance is on. */
   if (mode_configuration.high_impedance == ON) {
-    SPIMOSI_ODC = ON;
-    SPICLK_ODC = ON;
-    SPICS_ODC = ON;
+    SPIMOSI_ODC = OPEN_DRAIN;
+    SPICLK_ODC = OPEN_DRAIN;
+    SPICS_ODC = OPEN_DRAIN;
   } else {
-    SPIMOSI_ODC = OFF;
-    SPICLK_ODC = OFF;
-    SPICS_ODC = OFF;
+    SPIMOSI_ODC = PUSH_PULL;
+    SPICLK_ODC = PUSH_PULL;
+    SPICS_ODC = PUSH_PULL;
   }
 
   /* Assign pins routing. */
@@ -437,6 +467,8 @@ void spi_setup(const uint8_t spi_speed) {
   SPIMOSI_TRIS = OUTPUT;
 
   /*
+   * SPI1CON1 - SPI1 CONTROL REGISTER 1
+   *
    * MSB
    * ---000xx0x1xxxxx
    *    |||||||||||||
@@ -459,6 +491,8 @@ void spi_setup(const uint8_t spi_speed) {
       (MASKBOTTOM8(spi_state.data_sample_timing, 1) << _SPI1CON1_SMP_POSITION);
 
   /*
+   * SPI1CON2 - SPI1 CONTROL REGISTER 2
+   *
    * MSB
    * 000-----------0-
    * |||           |
@@ -470,17 +504,16 @@ void spi_setup(const uint8_t spi_speed) {
   SPI1CON2 = 0x0000;
 
   /*
+   * SPI1STAT - SPI1 STATUS REGISTER
+   *
    * MSB
-   * 0-0------0----??
+   * 1-0------0----??
    * | |      |
    * | |      +--------- SPIROV:  Overflow flag cleared.
    * | +---------------- SPISIDL: Continue module operation in idle mode.
-   * +------------------ SPIEN:   Module disabled.
+   * +------------------ SPIEN:   Module enabled.
    */
-  SPI1STAT = 0x0000;
-
-  /* Enable the interface. */
-  SPI1STATbits.SPIEN = ON;
+  SPI1STAT = _SPI1STAT_SPIEN_MASK;
 }
 
 void spi_disable_interface(void) {
@@ -494,14 +527,12 @@ void spi_disable_interface(void) {
   BP_CLK_RPOUT = 0b00000;
 
   /* Disable open drain. */
-  SPIMOSI_ODC = OFF;
-  SPICLK_ODC = OFF;
-  SPICS_ODC = OFF;
+  SPIMOSI_ODC = PUSH_PULL;
+  SPICLK_ODC = PUSH_PULL;
+  SPICS_ODC = PUSH_PULL;
 }
 
 uint8_t spi_write_byte(const uint8_t value) {
-  uint8_t result;
-
   /* Put the value on the bus. */
   SPI1BUF = value;
 
@@ -510,7 +541,7 @@ uint8_t spi_write_byte(const uint8_t value) {
   }
 
   /* Get the byte read from the bus. */
-  result = SPI1BUF;
+  uint8_t result = SPI1BUF;
 
   /* Free the SPI interface. */
   IFS0bits.SPI1IF = OFF;
@@ -584,6 +615,8 @@ restart:
       }
 
       /*
+       * SPI1STAT - SPI1 STATUS REGISTER
+       *
        * MSB
        * 0-0------0----??
        * | |      |
@@ -594,6 +627,8 @@ restart:
       SPI1STAT = 0x0000;
 
       /*
+       * SPI2STAT - SPI2 STATUS REGISTER
+       *
        * MSB
        * 0-0------0----??
        * | |      |
@@ -648,8 +683,10 @@ void spi_slave_enable(void) {
   /* Prepare SPI interfaces first. */
 
   /*
+   * SPI1CON1 - SPI1 CONTROL REGISTER 1
+   *
    * MSB
-   * ---0000x0x0xxxxx
+   * ---0000C0B0AAAAA
    *    |||||||||||||
    *    |||||||||||++--- PPRE:   Primary prescale bits.
    *    ||||||||+++----- SPRE:   Secondary prescale bits.
@@ -669,6 +706,8 @@ void spi_slave_enable(void) {
       (MASKBOTTOM8(spi_state.clock_edge, 1) << _SPI1CON1_CKE_POSITION);
 
   /*
+   * SPI1CON2 - SPI1 CONTROL REGISTER 2
+   *
    * MSB
    * 000-----------0-
    * |||           |
@@ -680,6 +719,8 @@ void spi_slave_enable(void) {
   SPI1CON2 = 0x0000;
 
   /*
+   * SPI1STAT - SPI1 STATUS REGISTER
+   *
    * MSB
    * 0-0------0----??
    * | |      |
@@ -690,8 +731,10 @@ void spi_slave_enable(void) {
   SPI1STAT = 0x0000;
 
   /*
+   * SPI2CON1 - SPI2 CONTROL REGISTER 1
+   *
    * MSB
-   * ---0000x0x0xxxxx
+   * ---0000C0B0AAAAA
    *    |||||||||||||
    *    |||||||||||++--- PPRE:   Primary prescale bits.
    *    ||||||||+++----- SPRE:   Secondary prescale bits.
@@ -711,6 +754,8 @@ void spi_slave_enable(void) {
       (MASKBOTTOM8(spi_state.clock_edge, 1) << _SPI2CON1_CKE_POSITION);
 
   /*
+   * SPI2CON2 - SPI2 CONTROL REGISTER 2
+   *
    * MSB
    * 000-----------0-
    * |||           |
@@ -722,6 +767,8 @@ void spi_slave_enable(void) {
   SPI2CON2 = 0x0000;
 
   /*
+   * SPI2STAT - SPI2 STATUS REGISTER
+   *
    * MSB
    * 0-0------0----??
    * | |      |
@@ -774,9 +821,6 @@ void spi_slave_disable(void) {
 }
 
 void spi_enter_binary_io(void) {
-  uint8_t input_byte;
-  uint8_t command;
-
   mode_configuration.speed = 1;
   spi_state.clock_polarity = SPI_CLOCK_IDLE_LOW;
   spi_state.clock_edge = SPI_TRANSITION_FROM_ACTIVE_TO_IDLE;
@@ -786,8 +830,8 @@ void spi_enter_binary_io(void) {
   MSG_SPI_MODE_IDENTIFIER;
 
   for (;;) {
-    input_byte = user_serial_read_byte();
-    command = input_byte >> 4;
+    uint8_t input_byte = user_serial_read_byte();
+    uint8_t command = input_byte >> 4;
 
     switch (command) {
     case SPI_COMMAND_BASE:
@@ -821,67 +865,10 @@ void spi_enter_binary_io(void) {
         break;
 
       case SPI_BASE_COMMAND_WRITE_AND_READ_WITH_CS:
-      case SPI_BASE_COMMAND_WRITE_AND_READ_WITHOUT_CS: {
-        uint16_t bytes_to_write;
-        uint16_t bytes_to_read;
-        uint16_t offset;
-
-        /* How many bytes to send to the bus. */
-        bytes_to_write =
-            (user_serial_read_byte() << 8) | user_serial_read_byte();
-
-        /* How many bytes to read from the bus. */
-        bytes_to_read =
-            (user_serial_read_byte() << 8) | user_serial_read_byte();
-
-        /* Make sure data fits in the internal buffer. */
-        if ((bytes_to_write > BP_TERMINAL_BUFFER_SIZE) ||
-            (bytes_to_read > BP_TERMINAL_BUFFER_SIZE)) {
-          REPORT_IO_FAILURE();
-          break;
-        }
-
-        /* Read data buffer from the serial port. */
-        for (offset = 0; offset < bytes_to_write; offset++) {
-          bus_pirate_configuration.terminal_input[offset] =
-              user_serial_read_byte();
-        }
-
-        /* Update the CS line if needed. */
-        if (input_byte == SPI_BASE_COMMAND_WRITE_AND_READ_WITH_CS) {
-          SPICS = LOW;
-        }
-
-        /* Writes data to the SPI bus. */
-        for (offset = 0; offset < bytes_to_write; offset++) {
-          spi_write_byte(bus_pirate_configuration.terminal_input[offset]);
-        }
-
-        /* Wait for the bus to settle. */
-        bp_delay_us(1);
-
-        /* Read data from the SPI bus. */
-        for (offset = 0; offset < bytes_to_read; offset++) {
-          bus_pirate_configuration.terminal_input[offset] =
-              spi_write_byte(0xFF);
-        }
-
-        /* Update the CS line if needed. */
-        if (input_byte == SPI_BASE_COMMAND_WRITE_AND_READ_WITH_CS) {
-          SPICS = HIGH;
-        }
-
-        /* Report success. */
-        REPORT_IO_SUCCESS();
-
-        /* Output read data to the serial port. */
-        for (offset = 0; offset < bytes_to_read; offset++) {
-          user_serial_transmit_character(
-              bus_pirate_configuration.terminal_input[offset]);
-        }
-
+      case SPI_BASE_COMMAND_WRITE_AND_READ_WITHOUT_CS:
+        spi_read_write_io(input_byte ==
+                          SPI_BASE_COMMAND_WRITE_AND_READ_WITH_CS);
         break;
-      }
 
 #ifdef BP_SPI_ENABLE_AVR_EXTENDED_COMMANDS
 
@@ -899,12 +886,9 @@ void spi_enter_binary_io(void) {
       break;
 
     case SPI_COMMAND_READ_DATA: {
-      uint8_t bytes_to_read;
-      uint8_t count;
-
-      bytes_to_read = (input_byte & 0x0F) + 1;
+      uint8_t bytes_to_read = (input_byte & 0x0F) + 1;
       REPORT_IO_SUCCESS();
-      for (count = 0; count < bytes_to_read; count++) {
+      for (size_t count = 0; count < bytes_to_read; count++) {
         user_serial_transmit_character(spi_write_byte(user_serial_read_byte()));
       }
       break;
@@ -924,9 +908,7 @@ void spi_enter_binary_io(void) {
 #endif /* BUSPIRATEV4 */
 
     case SPI_COMMAND_SET_SPEED: {
-      uint8_t speed;
-
-      speed = input_byte & 0x0F;
+      uint8_t speed = input_byte & 0x0F;
       if (speed > sizeof(spi_bus_speed)) {
         REPORT_IO_FAILURE();
         break;
@@ -963,15 +945,112 @@ void spi_enter_binary_io(void) {
   }
 }
 
+void spi_write_from_uart(const size_t bytes_to_write) {
+#ifdef BP_SPI_ENABLE_STREAMING_WRITE
+  /* Writes data to the SPI bus as soon as read from the serial port. */
+  for (uint16_t counter = 0; counter < bytes_to_write; counter++) {
+    spi_write_byte(user_serial_read_byte());
+  }
+#else
+
+  /* Read data buffer from the serial port. */
+  for (uint16_t offset = 0; offset < bytes_to_write; offset++) {
+    bus_pirate_configuration.terminal_input[offset] = user_serial_read_byte();
+  }
+
+  /* Writes data to the SPI bus. */
+  for (uint16_t offset = 0; offset < bytes_to_write; offset++) {
+    spi_write_byte(bus_pirate_configuration.terminal_input[offset]);
+  }
+#endif /* BP_SPI_ENABLE_STREAMING_WRITE */
+}
+
+void spi_read_to_uart(const size_t bytes_to_read) {
+#ifdef BP_SPI_ENABLE_STREAMING_READ
+  /* Start streaming data. */
+  REPORT_IO_SUCCESS();
+
+  /* Writes data to the serial port as soon as read from the SPI bus. */
+  for (uint16_t counter = 0; counter < bytes_to_read; counter++) {
+    user_serial_transmit_character(spi_write_byte(0xFF));
+  }
+
+#else
+
+  /* Read data from the SPI bus. */
+  for (uint16_t offset = 0; offset < bytes_to_read; offset++) {
+    bus_pirate_configuration.terminal_input[offset] = spi_write_byte(0xFF);
+  }
+
+  /* Report success. */
+  REPORT_IO_SUCCESS();
+
+  /* Output read data to the serial port. */
+  for (uint16_t offset = 0; offset < bytes_to_read; offset++) {
+    user_serial_transmit_character(
+        bus_pirate_configuration.terminal_input[offset]);
+  }
+#endif /* BP_SPI_ENABLE_STREAMING_READ */
+}
+
+void spi_read_write_io(const bool engage_cs) {
+
+  /* How many bytes to send to the bus. */
+  uint16_t bytes_to_write = user_serial_read_big_endian_word();
+
+  /* How many bytes to read from the bus. */
+  uint16_t bytes_to_read = user_serial_read_big_endian_word();
+
+#ifndef BP_SPI_ENABLE_STREAMING_WRITE
+  /* Make sure data fits in the internal buffer. */
+  if (bytes_to_write > BP_TERMINAL_BUFFER_SIZE) {
+    REPORT_IO_FAILURE();
+    return;
+  }
+#endif /* !BP_SPI_ENABLE_STREAMING_WRITE */
+
+#ifndef BP_SPI_ENABLE_STREAMING_READ
+  /* Make sure data fits in the internal buffer. */
+  if (bytes_to_write > BP_TERMINAL_BUFFER_SIZE) {
+    REPORT_IO_FAILURE();
+    return;
+  }
+#endif /* !BP_SPI_ENABLE_STREAMING_READ */
+
+  if ((bytes_to_write == 0) && (bytes_to_read == 0)) {
+    REPORT_IO_FAILURE();
+    return;
+  }
+
+  /* Update the CS line if needed. */
+  if (engage_cs == true) {
+    SPICS = LOW;
+  }
+
+  if (bytes_to_write > 0) {
+    spi_write_from_uart(bytes_to_write);
+
+    /* Wait for the bus to settle. */
+    bp_delay_us(1);
+  }
+
+  if (bytes_to_read > 0) {
+    spi_read_to_uart(bytes_to_read);
+  }
+
+  /* Reset the CS line if needed. */
+  if (engage_cs == true) {
+    SPICS = HIGH;
+  }
+}
+
 #ifdef BP_SPI_ENABLE_AVR_EXTENDED_COMMANDS
 
 void handle_extended_avr_command(void) {
-  uint8_t command;
-
   /* Acknowledge extended command. */
   REPORT_IO_SUCCESS();
 
-  command = user_serial_read_byte();
+  uint8_t command = user_serial_read_byte();
   switch (command) {
   case BINARY_IO_SPI_AVR_COMMAND_NOOP:
     REPORT_IO_SUCCESS();
@@ -984,19 +1063,8 @@ void handle_extended_avr_command(void) {
     break;
 
   case BINARY_IO_SPI_AVR_COMMAND_BULK_READ: {
-    uint32_t address;
-    uint32_t length;
-
-    address = (uint32_t)((((uint32_t)user_serial_read_byte()) << 24) |
-                         (((uint32_t)user_serial_read_byte()) << 16) |
-                         (((uint32_t)user_serial_read_byte()) << 8) |
-                         user_serial_read_byte());
-    length = (uint32_t)((((uint32_t)user_serial_read_byte()) << 24) |
-                        (((uint32_t)user_serial_read_byte()) << 16) |
-                        (((uint32_t)user_serial_read_byte()) << 8) |
-                        user_serial_read_byte());
-
-    /* @todo: avoid (address + length) integer overflow. */
+    uint32_t address = user_serial_read_big_endian_long_word();
+    uint32_t length = user_serial_read_big_endian_long_word();
 
     if ((address > 0xFFFF) || (length > 0xFFFF) ||
         ((address + length) > 0xFFFF)) {

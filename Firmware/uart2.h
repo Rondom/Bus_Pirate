@@ -1,6 +1,6 @@
 /*
  * This file is part of the Bus Pirate project
- * (http://code.google.com/p/the-bus-pirate/).
+ * (https://github.com/BusPirate/Bus_Pirate/).
  *
  * Written and maintained by the Bus Pirate project.
  *
@@ -90,12 +90,26 @@
 #define UART2_2_S ON
 
 /**
+ * @def UART2_PUSH_PULL
+ *
+ * Flag indicating that the port needs to work in push-pull mode.
+ */
+#define UART2_PUSH_PULL PUSH_PULL
+
+/**
+ * @def UART2_OPEN_DRAIN
+ *
+ * Flag indicating that the port needs to work in open drain mode.
+ */
+#define UART2_OPEN_DRAIN OPEN_DRAIN
+
+/**
  * Sets up UART #2.
  *
  * @param[in] baud_rate_generator_prescaler the prescaler value for UART #2's
  * baud rate generator.
- * @param[in] open_drain_output ON if the output should be open-drain, OFF if it
- * should be active driver.
+ * @param[in] open_drain_output UART2_OPEN_DRAIN if the output should be open
+ * drain, UART2_PUSH_PULL if it should be working in push-pull mode.
  * @param[in] invert_polarity UART2_POLARITY_INVERT_YES if RX and TX idle states
  * are going to be inverted from what the RS232 standard mandates,
  * UART2_POLARITY_INVERT_NO if the port must follow RS232 specifications.
@@ -107,6 +121,8 @@
  *
  * @see UART2_POLARITY_INVERT_YES
  * @see UART2_POLARITY_INVERT_NO
+ * @see UART2_OPEN_DRAIN
+ * @see UART2_PUSH_PULL
  * @see UART2_9_N
  * @see UART2_8_O
  * @see UART2_8_E

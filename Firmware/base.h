@@ -41,10 +41,12 @@
 #include "messages.h"
 #include "types.h"
 
+#include "bp-version.h"
+
 /**
  * @brief Firmware version string, used at startup and for the 'i' command.
  */
-#define BP_FIRMWARE_STRING "Community Firmware v7.1 - goo.gl/gCzQnW "
+#define BP_FIRMWARE_STRING "Community Firmware " BP_GIT_VERSION_STRING " - goo.gl/gCzQnW "
 
 /**
  * @brief Current mode configuration settings structure.
@@ -61,7 +63,7 @@ typedef struct {
    * Which pin is currently used as the `AUX` I/O.
    */
   uint8_t alternate_aux : 2;
-  
+
   uint8_t periodicService : 1;
 
   /**
@@ -162,6 +164,8 @@ void bp_adc_continuous_probe(void);
  */
 void bp_write_formatted_integer(const uint16_t value);
 
+#ifndef BP_USE_HARDWARE_DELAY_TIMER
+
 /**
  * @brief Pauses execution for the given amount of milliseconds.
  *
@@ -175,6 +179,24 @@ void bp_write_formatted_integer(const uint16_t value);
  * @param[in] microseconds the amount of microseconds to wait.
  */
 #define bp_delay_us(microseconds) __delay_us(microseconds)
+
+#else
+
+/**
+ * @brief Pauses execution for the given amount of milliseconds.
+ *
+ * @param[in] milliseconds the amount of milliseconds to wait.
+ */
+void bp_delay_ms(uint16_t milliseconds);
+
+/**
+ * @brief Pauses execution for the given amount of microseconds.
+ *
+ * @param[in] microseconds the amount of microseconds to wait.
+ */
+void bp_delay_us(uint16_t microseconds);
+
+#endif /* !BP_USE_HARDWARE_DELAY_TIMER */
 
 /**
  * @brief Writes the given buffer to the serial port.
@@ -276,6 +298,12 @@ uint16_t bp_read_from_flash(const uint16_t page, const uint16_t address);
 void bp_write_hex_byte_to_ringbuffer(const uint8_t value);
 
 /**
+ * @brief Initialises the hardware timer used to calculate delays, if the
+ * current configuration requests its usage.
+ */
+void bp_initialise_delay_timer(void);
+
+/**
  * @brief Shortcut for writing an empty line to the user-facing serial port.
  */
 #define bpBR bp_write_line("")
@@ -360,6 +388,26 @@ void user_serial_wait_transmission_done(void);
  * @return the byte read from the serial port.
  */
 uint8_t user_serial_read_byte(void);
+
+/**
+ * @brief Blocks execution until two bytes arrive on the user-facing serial port
+ * and returns said value.
+ *
+ * The 16-bits value is read in big-endian format (MSB first).
+ *
+ * @return the word read from the serial port.
+ */
+uint16_t user_serial_read_big_endian_word(void);
+
+/**
+ * @brief Blocks execution until four bytes arrive on the user-facing serial
+ * port and returns said value.
+ *
+ * The 32-bits value is read in big-endian format (MSB first).
+ *
+ * @return the long word read from the serial port.
+ */
+uint32_t user_serial_read_big_endian_long_word(void);
 
 /**
  * @brief Writes the first available byte from the transmission queue into the

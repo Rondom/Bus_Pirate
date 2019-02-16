@@ -97,6 +97,10 @@ static inline void bp_disable_voltage_regulator(void) {
   BP_VREGEN = OFF;
 }
 
+static inline bool bp_get_voltage_regulator_state(void) {
+  return BP_VREGEN;
+}
+
 static inline void bp_set_voltage_regulator_state(bool state) {
   if (state == ON) {
     bp_enable_voltage_regulator();
