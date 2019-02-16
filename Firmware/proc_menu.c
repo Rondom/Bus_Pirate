@@ -1,6 +1,6 @@
 /*
  * This file is part of the Bus Pirate project
- * (http://code.google.com/p/the-bus-pirate/).
+ * (https://github.com/BusPirate/Bus_Pirate/).
  *
  * Written and maintained by the Bus Pirate project.
  *
@@ -28,6 +28,71 @@
 #include "proc_menu.h" //need our public versionInfo() function
 #include "selftest.h"
 #include "sump.h"
+
+/**
+ * ASCII scancode for the NUL character.
+ */
+#define ASCII_NUL 0x00
+
+/**
+ * ASCII scancode for the SOH character.
+ */
+#define ASCII_SOH 0x01
+
+/**
+ * ASCII scancode for the STX character.
+ */
+#define ASCII_STX 0x02
+
+/**
+ * ASCII scancode for the EOT character.
+ */
+#define ASCII_EOT 0x04
+
+/**
+ * ASCII scancode for the ENQ character.
+ */
+#define ASCII_ENQ 0x05
+
+/**
+ * ASCII scancode for the ACK character.
+ */
+#define ASCII_ACK 0x06
+
+/**
+ * ASCII scancode for the BACKSPACE key.
+ */
+#define ASCII_BS 0x08
+
+/**
+ * ASCII scancode for the LF character.
+ */
+#define ASCII_LF 0x0A
+
+/**
+ * ASCII scancode for the CR character.
+ */
+#define ASCII_CR 0x0D
+
+/**
+ * ASCII scancode for the SO character.
+ */
+#define ASCII_SO 0x0E
+
+/**
+ * ASCII scancode for the DLE character.
+ */
+#define ASCII_DLE 0x10
+
+/**
+ * ASCII scancode for the ESCAPE key.
+ */
+#define ASCII_ESCAPE 0x1B
+
+/**
+ * ASCII scancode for the DELETE key.
+ */
+#define ASCII_DELETE 0x7F
 
 extern bus_pirate_configuration_t bus_pirate_configuration;
 extern mode_configuration_t mode_configuration;
@@ -90,6 +155,89 @@ static void print_pin_state(const uint16_t pin);
 
 static void convert_value(const bool reversed);
 
+/**
+ * Handles the backspace key being sent to the user menu.
+ */
+static void handle_backspace(void);
+
+/**
+ * Handles the delete key being sent to the user menu.
+ */
+static void handle_delete(void);
+
+/**
+ * Removes the currently pointed character in the command line buffer.
+ */
+static void remove_current_character_from_command_line(void);
+
+/**
+ * Handles the left arrow key being sent to the user menu.
+ */
+static void handle_left_arrow(void);
+
+/**
+ * Handles the right arrow key being sent to the user menu.
+ */
+static void handle_right_arrow(void);
+
+/**
+ * Handles the up arrow key being sent to the user menu.
+ */
+static void handle_up_arrow(void);
+
+/**
+ * Handles the down arrow key being sent to the user menu.
+ */
+static void handle_down_arrow(void);
+
+/**
+ * Handles the home key being sent to the user menu.
+ */
+static void handle_home_key(void);
+
+/**
+ * Handles the end key being sent to the user menu.
+ */
+static void handle_end_key(void);
+
+/**
+ * Handles the escape key being sent to the user menu.
+ */
+static void handle_escape_key(void);
+
+/**
+ * Refreshes the current mode prompt.
+ */
+static void refresh_mode_prompt(void);
+
+/**
+ * Refreshes the command line with the data starting at the given offset.
+ *
+ * @param[in] start the offset in the command buffer where the new command line
+ * starts.
+ */
+static void refresh_command_line(const uint16_t start);
+
+/**
+ * Handles the enter key being sent to the user menu.
+ */
+static void handle_enter_key(void);
+
+/**
+ * Handles a non-control character being sent to the user menu.
+ */
+static void handle_character(const uint8_t character);
+
+/**
+ * Turns on the power supplies.
+ */
+static void switch_psu_on(void);
+
+/**
+ * Turns off the power supplies.
+ */
+static void switch_psu_off(void);
+
 #ifdef BUSPIRATEV4
 void set_pullup_voltage(void);
 #endif /* BUSPIRATEV4 */
@@ -101,35 +249,46 @@ unsigned int cmdstart;
 static char user_macros[BP_USER_MACROS_COUNT][BP_USER_MACRO_MAX_LENGTH];
 static int user_macro;
 
+/**
+ * The user menu global state container structure.
+ */
+typedef struct {
+  /** Cursor position inside the command line buffer. */
+  uint16_t cursor_position;
+
+  /** History entry index in the command line buffer. */
+  uint16_t history_entry_counter;
+
+  /** Binary mode entering sequence counter. */
+  uint8_t binary_mode_counter;
+
+  /** Flag indicating if a potentially valid command has been entered. */
+  bool command_present;
+} menu_state_t;
+
+/**
+ * The user menu state.
+ */
+static menu_state_t menu_state = {0};
+
 void serviceuser(void) {
-  int cmd, stop;
   int newstart;
   int oldstart;
   unsigned int sendw, received;
   int repeat;
-  unsigned char c;
   int temp;
-  int temp2;
-  int binmodecnt;
   int numbits;
-  unsigned int tmpcmdend, histcnt, tmphistcnt;
   unsigned char oldDmode; // temporarily holds the default display mode, while a
                           // different display read is performed
   unsigned char newDmode;
 
   // init
-  cmd = 0;
   cmdstart = 0;
   cmdend = 0;
-  tmpcmdend = cmdend;
-  histcnt = 0;
-  tmphistcnt = 0;
+  menu_state.cursor_position = cmdend;
   bus_pirate_configuration.bus_mode = BP_HIZ;
-  temp2 = 0;
   mode_configuration.command_error = NO;
-  binmodecnt = 0;
 
-  stop = 0;
   newstart = 0;
   oldstart = 0;
 
@@ -149,7 +308,7 @@ void serviceuser(void) {
     }
 #endif /* BP_ENABLE_BASIC_SUPPORT */
     bp_write_string(">");
-    while (!cmd) {
+    while (!menu_state.command_present) {
       if (user_macro) {
         user_macro--;
         temp = 0;
@@ -163,376 +322,126 @@ void serviceuser(void) {
         user_macro = 0;
       }
 
-      while (!user_serial_ready_to_read()) // as long as there is no user input
-                                           // poll periodicservice
-      {
-        if (mode_configuration.periodicService == 1) {
+      /* Handle periodic service callbacks if needed. */
+
+      while (!user_serial_ready_to_read()) {
+        if (mode_configuration.periodicService == ON) {
+          /* Print periodic service output if any has been generated. */
           if (enabled_protocols[bus_pirate_configuration.bus_mode]
-                  .periodic_update()) // did we print something?
-          {
+                  .periodic_update()) {
             bp_write_string(
                 enabled_protocols[bus_pirate_configuration.bus_mode].name);
             bp_write_string(">");
             if (cmdstart != cmdend) {
-              for (temp = cmdstart; temp != cmdend; temp++) {
-                user_serial_transmit_character(cmdbuf[temp]);
-                temp &= CMDLENMSK;
+              for (size_t offset = cmdstart; offset != cmdend; offset++) {
+                user_serial_transmit_character(cmdbuf[offset]);
+                offset &= CMDLENMSK;
               }
             }
           }
         }
       }
 
-      if (user_serial_check_overflow()) { // check for user terminal buffer
-                                          // overflow error
+      /* Reset serial overflows if any are found. */
+
+      if (user_serial_check_overflow()) {
         user_serial_clear_overflow();
-        continue; // resume getting more user input
-      } else {
-        c = user_serial_read_byte(); // no error, process byte
+        continue;
       }
 
-      switch (c) {
-      case 0x08:                   // backspace(^H)
-        if (tmpcmdend != cmdstart) // not at begining?
-        {
-          if (tmpcmdend == cmdend) // at the end?
-          {
-            cmdend = (cmdend - 1) & CMDLENMSK;
-            cmdbuf[cmdend] = 0x00;        // add end marker
-            tmpcmdend = cmdend;           // update temp
-            bp_write_string("\x08 \x08"); // destructive backspace ian !! :P
-          } else                          // not at end, left arrow used
-          {
-            repeat = 0; // use as temp, not valid here anyway
-            tmpcmdend = (tmpcmdend - 1) & CMDLENMSK;
-            bp_write_string("\x1B[D"); // move left
-            for (temp = tmpcmdend; temp != cmdend;
-                 temp = (temp + 1) & CMDLENMSK) {
-              cmdbuf[temp] = cmdbuf[temp + 1];
-              if (cmdbuf[temp]) // not NULL
-                user_serial_transmit_character(cmdbuf[temp]);
-              else
-                user_serial_transmit_character(0x20);
-              repeat++;
-            }
-            cmdend = (cmdend - 1) & CMDLENMSK; // end pointer moves left one
-            bp_write_string("\x1B[");          // move left
-            bp_write_dec_byte(repeat);         // to original
-            bp_write_string("D");              // cursor position
-          }
-        } else {
-          user_serial_transmit_character(BELL); // beep, at begining
-        }
+      /* Process incoming byte. */
+
+      uint8_t user_byte = user_serial_read_byte();
+
+      switch (user_byte) {
+
+      case ASCII_BS:
+        handle_backspace();
         break;
-      case 0x04:                 // delete (^D)
-      case 0x7F:                 // delete key
-        if (tmpcmdend != cmdend) // not at the end
-        {
-          repeat = 0; // use as temp, not valid here anyway
-          for (temp = tmpcmdend; temp != cmdend;
-               temp = (temp + 1) & CMDLENMSK) {
-            cmdbuf[temp] = cmdbuf[temp + 1];
-            if (cmdbuf[temp]) // not NULL
-              user_serial_transmit_character(cmdbuf[temp]);
-            else
-              user_serial_transmit_character(0x20);
-            repeat++;
-          }
-          cmdend = (cmdend - 1) & CMDLENMSK; // end pointer moves left one
-          bp_write_string("\x1B[");          // move left
-          bp_write_dec_byte(repeat);         // to original
-          bp_write_string("D");              // cursor position
-        } else {
-          user_serial_transmit_character(BELL); // beep, at end
-        }
+
+      case ASCII_EOT:
+      case ASCII_DELETE:
+        handle_delete();
         break;
-      case 0x1B:                     // escape
-        c = user_serial_read_byte(); // get next char
-        if (c == '[')                // got CSI
-        {
-          c = user_serial_read_byte(); // get next char
-          switch (c) {
-          case 'D': // left arrow
-            goto left;
-            break;
-          case 'C': // right arrow
-            goto right;
-            break;
-          case 'A': // up arrow
-            goto up;
-            break;
-          case 'B': // down arrow
-            goto down;
-            break;
-          case '1': // VT100+ home key (example use in PuTTY)
-            c = user_serial_read_byte();
-            if (c == '~')
-              goto home;
-            break;
-          case '4': // VT100+ end key (example use in PuTTY)
-            c = user_serial_read_byte();
-            if (c == '~')
-              goto end;
-            break;
-          }
-        }
+
+      case ASCII_ESCAPE:
+        handle_escape_key();
         break;
-      left:
-      case 0x02: // ^B (left arrow) or SUMP
-#ifdef BP_ENABLE_SUMP_SUPPORT
-        if (binmodecnt >= 5) {
-          enter_sump_mode();
-          binmodecnt = 0; // do we get here or not?
-        } else            // ^B (left arrow)
-#endif                    /* BP_ENABLE_SUMP_SUPPORT */
-        {
-          if (tmpcmdend != cmdstart) // at the begining?
-          {
-            tmpcmdend = (tmpcmdend - 1) & CMDLENMSK;
-            bp_write_string("\x1B[D"); // move left
-          } else {
-            user_serial_transmit_character(BELL); // beep, at begining
-          }
-        }
+
+      case ASCII_STX:
+        handle_left_arrow();
         break;
-      right:
-      case 0x06:                 // ^F (right arrow)
-        if (tmpcmdend != cmdend) // ^F (right arrow)
-        {                        // ensure not at end
-          tmpcmdend = (tmpcmdend + 1) & CMDLENMSK;
-          bp_write_string("\x1B[C"); // move right
-        } else {
-          user_serial_transmit_character(BELL); // beep, at end
-        }
+
+      case ASCII_ACK:
+        handle_right_arrow();
         break;
-      up:
-      case 0x10:        // ^P (up arrow)
-        tmphistcnt = 0; // reset counter
-        for (temp = (cmdstart - 1) & CMDLENMSK; temp != cmdend;
-             temp = (temp - 1) & CMDLENMSK) {
-          if (!cmdbuf[temp] &&
-              cmdbuf[(temp - 1) &
-                     CMDLENMSK]) { // found previous entry, temp is old cmdend
-            tmphistcnt++;
-            if (tmphistcnt > histcnt) {
-              histcnt++;
-              if (cmdstart != cmdend) { // clear partially entered cmd line
-                while (cmdend != cmdstart) {
-                  cmdbuf[cmdend] = 0x00;
-                  cmdend = (cmdend - 1) & CMDLENMSK;
-                }
-                cmdbuf[cmdend] = 0x00;
-              }
-              repeat = (temp - 1) & CMDLENMSK;
-              while (repeat != cmdend) {
-                if (!cmdbuf[repeat]) {
-                  temp2 = (repeat + 1) & CMDLENMSK;
-                  /* start of old cmd */
-                  break;
-                }
-                repeat = (repeat - 1) & CMDLENMSK;
-              }
-              bp_write_string("\x1B[2K\x0D"); // clear line, CR
-              bp_write_string(
-                  enabled_protocols[bus_pirate_configuration.bus_mode].name);
-#ifdef BP_ENABLE_BASIC_SUPPORT
-              if (bus_pirate_configuration.basic) {
-                BPMSG1084;
-              }
-#endif /* BP_ENABLE_BASIC_SUPPORT */
-              bp_write_string(">");
-              for (repeat = temp2; repeat != temp;
-                   repeat = (repeat + 1) & CMDLENMSK) {
-                user_serial_transmit_character(cmdbuf[repeat]);
-                cmdbuf[cmdend] = cmdbuf[repeat];
-                cmdend = (cmdend + 1) & CMDLENMSK;
-              }
-              cmdbuf[cmdend] = 0x00;
-              tmpcmdend = cmdend; // resync
-              break;
-            }
-          }
-        }
-        if (temp == cmdend)
-          user_serial_transmit_character(BELL); // beep, top
+
+      case ASCII_DLE:
+        handle_up_arrow();
         break;
-      down:
-      case 0x0E:        // ^N (down arrow)
-        tmphistcnt = 0; // reset counter
-        for (temp = (cmdstart - 1) & CMDLENMSK; temp != cmdend;
-             temp = (temp - 1) & CMDLENMSK) {
-          if (!cmdbuf[temp] &&
-              cmdbuf[(temp - 1) &
-                     CMDLENMSK]) { // found previous entry, temp is old cmdend
-            tmphistcnt++;
-            if (tmphistcnt == (histcnt - 1)) {
-              histcnt--;
-              if (cmdstart != cmdend) { // clear partially entered cmd line
-                while (cmdend != cmdstart) {
-                  cmdbuf[cmdend] = 0x00;
-                  cmdend = (cmdend - 1) & CMDLENMSK;
-                }
-                cmdbuf[cmdend] = 0x00;
-              }
-              repeat = (temp - 1) & CMDLENMSK;
-              while (repeat != cmdend) {
-                if (!cmdbuf[repeat]) {
-                  temp2 = (repeat + 1) & CMDLENMSK;
-                  /* start of old cmd */
-                  break;
-                }
-                repeat = (repeat - 1) & CMDLENMSK;
-              }
-              bp_write_string("\x1B[2K\x0D"); // clear line, CR
-              bp_write_string(
-                  enabled_protocols[bus_pirate_configuration.bus_mode].name);
-#ifdef BP_ENABLE_BASIC_SUPPORT
-              if (bus_pirate_configuration.basic) {
-                BPMSG1084;
-              }
-#endif /* BP_ENABLE_BASIC_SUPPORT */
-              bp_write_string(">");
-              for (repeat = temp2; repeat != temp;
-                   repeat = (repeat + 1) & CMDLENMSK) {
-                user_serial_transmit_character(cmdbuf[repeat]);
-                cmdbuf[cmdend] = cmdbuf[repeat];
-                cmdend = (cmdend + 1) & CMDLENMSK;
-              }
-              cmdbuf[cmdend] = 0x00;
-              tmpcmdend = cmdend; // resync
-              break;
-            }
-          }
-        }
-        if (temp == cmdend) {
-          if (histcnt == 1) {
-            bp_write_string("\x1B[2K\x0D"); // clear line, CR
-            bp_write_string(
-                enabled_protocols[bus_pirate_configuration.bus_mode].name);
-#ifdef BP_ENABLE_BASIC_SUPPORT
-            if (bus_pirate_configuration.basic) {
-              BPMSG1084;
-            }
-#endif /* BP_ENABLE_BASIC_SUPPORT */
-            bp_write_string(">");
-            while (cmdend != cmdstart) {
-              cmdbuf[cmdend] = 0x00;
-              cmdend = (cmdend - 1) & CMDLENMSK;
-            }
-            cmdbuf[cmdend] = 0x00;
-            tmpcmdend = cmdend; // resync
-            histcnt = 0;
-          } else
-            user_serial_transmit_character(BELL); // beep, top
-        }
+
+      case ASCII_SO:
+        handle_down_arrow();
         break;
-      home:
-      case 0x01: // ^A (goto begining of line)
-        if (tmpcmdend != cmdstart) {
-          repeat = (tmpcmdend - cmdstart) & CMDLENMSK;
-          bp_write_string("\x1B[");  // move left
-          bp_write_dec_byte(repeat); // to start
-          bp_write_string("D");      // of command line
-          tmpcmdend = cmdstart;
-        } else {
-          user_serial_transmit_character(BELL); // beep, at start
-        }
+
+      case ASCII_SOH:
+        handle_home_key();
         break;
-      end:
-      case 0x05: // ^E (goto end of line)
-        if (tmpcmdend != cmdend) {
-          repeat = (cmdend - tmpcmdend) & CMDLENMSK;
-          bp_write_string("\x1B[");  // move right
-          bp_write_dec_byte(repeat); // to end
-          bp_write_string("C");      // of command line
-          tmpcmdend = cmdend;
-        } else {
-          user_serial_transmit_character(BELL); // beep, at end
-        }
+
+      case ASCII_ENQ:
+        handle_end_key();
         break;
-      case 0x0A:               // Does any terminal only send a CR?
-      case 0x0D:               // Enter pressed (LF)
-        cmd = 1;               // command received
-        histcnt = 0;           // reset counter
-        cmdbuf[cmdend] = 0x00; // use to find history
-        cmdend = (cmdend + 1) & CMDLENMSK;
-        tmpcmdend = cmdend; // resync
-        bpBR;
+
+      case ASCII_CR:
+      case ASCII_LF:
+        handle_enter_key();
         break;
-      case 0x00:
-        binmodecnt++;
-        if (binmodecnt == 20) {
+
+      case ASCII_NUL:
+        menu_state.binary_mode_counter++;
+        if (menu_state.binary_mode_counter == 20) {
           enter_binary_bitbang_mode();
 #ifdef BUSPIRATEV4
-          binmodecnt = 0; // no reset, cleanup manually
-          goto bpv4reset; // versionInfo(); //and simulate reset for dependent
-                          // apps (looking at you AVR dude!)
-#endif                    /* BUSPIRATEV4 */
+          menu_state.binary_mode_counter = 0;
+          /* Simulate reset. */
+          goto bpv4reset;
+#endif /* BUSPIRATEV4 */
         }
         break;
 
       default:
-        if ((((cmdend + 1) & CMDLENMSK) != cmdstart) && (c >= 0x20) &&
-            (c < 0x7F)) {          // no overflow and printable
-          if (cmdend == tmpcmdend) // adding to the end
-          {
-            user_serial_transmit_character(c); // echo back
-            cmdbuf[cmdend] = c;                // store char
-            cmdend = (cmdend + 1) & CMDLENMSK;
-            cmdbuf[cmdend] = 0x00; // add end marker
-            tmpcmdend = cmdend;    // update temp
-          } else                   // not at end, left arrow used
-          {
-            repeat = (cmdend - tmpcmdend) & CMDLENMSK;
-            bp_write_string("\x1B[");  // move right
-            bp_write_dec_byte(repeat); // to end
-            bp_write_string("C");      // of line
-            temp = cmdend;
-            while (temp != ((tmpcmdend - 1) & CMDLENMSK)) {
-              cmdbuf[temp + 1] = cmdbuf[temp];
-              if (cmdbuf[temp]) // not NULL
-              {
-                user_serial_transmit_character(cmdbuf[temp]);
-                bp_write_string("\x1B[2D"); // left 2
-              }
-              temp = (temp - 1) & CMDLENMSK;
-            }
-            user_serial_transmit_character(c); // echo back
-            cmdbuf[tmpcmdend] = c;             // store char
-            tmpcmdend = (tmpcmdend + 1) & CMDLENMSK;
-            cmdend = (cmdend + 1) & CMDLENMSK;
-          }
-        } else {
-          user_serial_transmit_character(
-              BELL); // beep, overflow or non printable
-        }            // default:
-      }              // switch(c)
-    }                // while(!cmd)
+        handle_character(user_byte);
+        break;
+      }
+    }
+
+    /* Process current command line. */
 
     newstart = cmdend;
     oldstart = cmdstart;
-    cmd = 0;
+    menu_state.command_present = NO;
 
-    stop = 0;
     mode_configuration.command_error = NO;
+
+    bool stop = NO;
 
 #ifdef BP_ENABLE_BASIC_SUPPORT
     if (bus_pirate_configuration.basic) {
       bp_basic_enter_interactive_interpreter();
-      // bpWline("Ready.");
       BPMSG1085;
-      stop = 1;
+      stop = YES;
     }
 #endif /* BP_ENABLE_BASIC_SUPPORT */
 
     oldDmode = 0; // temporarily holds the default display mode, while a
                   // different display read is performed
     newDmode = 0;
-    while (!stop) {
-      c = cmdbuf[cmdstart];
 
-      switch (c) { // generic commands (not bus specific)
-      case 'h':    // bpWline("-command history");
+    while (!stop) {
+      uint8_t c = cmdbuf[cmdstart];
+
+      switch (c) {
+      case 'h':
 #ifdef BP_ENABLE_COMMAND_HISTORY
         if (!cmdhistory()) {
           oldstart = cmdstart;
@@ -541,77 +450,83 @@ void serviceuser(void) {
 #endif /* BP_ENABLE_COMMAND_HISTORY */
         break;
 
-      case '?': // bpWline("-HELP");
+      case '?':
         print_help();
         break;
-      case 'i':               // bpWline("-Status info");
-        print_version_info(); // display hardware and firmware version string
+
+      case 'i':
+        print_version_info();
         if (bus_pirate_configuration.bus_mode != BP_HIZ) {
           print_status_info();
         }
         break;
-      case 'm': // bpWline("-mode change");
+
+      case 'm':
         changemode();
         break;
-      case 'b': // bpWline("-terminal speed set");
+
+      case 'b':
         set_baud_rate();
         break;
-      case 'o': // bpWline("-data output set");
+
+      case 'o':
         set_display_mode();
         break;
-      case 'v': // bpWline("-check supply voltage");
+
+      case 'v':
         print_pins_information();
-        // measureSupplyVoltages();
         break;
-      case 'f': // bpWline("-frequency count on AUX");
+
+      case 'f':
         bp_frequency_counter_setup();
         break;
+
       case 'g':
-        if (bus_pirate_configuration.bus_mode ==
-            BP_HIZ) { // bpWmessage(MSG_ERROR_MODE);
+        if (bus_pirate_configuration.bus_mode == BP_HIZ) {
           BPMSG1088;
         } else {
           bp_pwm_setup();
         }
         break;
-      case 'c': // bpWline("-aux pin assigment");
+
+      case 'c':
         mode_configuration.alternate_aux = 0;
-        // bpWmessage(MSG_OPT_AUXPIN_AUX);
         BPMSG1086;
         break;
-      case 'C': // bpWline("-aux pin assigment");
+
+      case 'C':
         mode_configuration.alternate_aux = 1;
-        // bpWmessage(MSG_OPT_AUXPIN_CS);
         BPMSG1087;
         break;
+
 #ifdef BUSPIRATEV4
       case 'k':
         mode_configuration.alternate_aux = 2;
-        // bpWline("AUX1 selected");
         BPMSG1263;
         break;
+
       case 'K':
         mode_configuration.alternate_aux = 3;
-        // bpWline("AUX2 selected");
         BPMSG1264;
         break;
 #endif /* BUSPIRATEV4 */
+
       case 'L':
         mode_configuration.little_endian = YES;
         BPMSG1124;
         bpBR;
         break;
+
       case 'l':
         mode_configuration.little_endian = NO;
         BPMSG1123;
         bpBR;
         break;
+
       case 'p':
-        // bpWline("-pullup resistors off");
         // don't allow pullups on some modules. also: V0a limitation of 2
         // resistors
-        if (bus_pirate_configuration.bus_mode ==
-            BP_HIZ) { // bpWmessage(MSG_ERROR_MODE);
+        if (bus_pirate_configuration.bus_mode == BP_HIZ) {
           BPMSG1088;
         } else {
           bp_disable_pullup();
@@ -619,15 +534,14 @@ void serviceuser(void) {
           bpBR;
         }
         break;
-      case 'P': // bpWline("-pullup resistors on");
+
+      case 'P':
         // don't allow pullups on some modules. also: V0a limitation of 2
         // resistors
-        if (bus_pirate_configuration.bus_mode ==
-            BP_HIZ) { // bpWmessage(MSG_ERROR_MODE);
+        if (bus_pirate_configuration.bus_mode == BP_HIZ) {
           BPMSG1088;
         } else {
-          if (mode_configuration.high_impedance ==
-              0) { // bpWmessage(MSG_ERROR_NOTHIZPIN);
+          if (mode_configuration.high_impedance == NO) {
             BPMSG1209;
           }
           bp_enable_pullup();
@@ -642,6 +556,7 @@ void serviceuser(void) {
           bp_disable_adc();
         }
         break;
+
 #ifdef BUSPIRATEV4
       case 'e':
         set_pullup_voltage();
@@ -660,10 +575,10 @@ void serviceuser(void) {
         if (bus_pirate_configuration.bus_mode == BP_HIZ) {
           perform_selftest(true, true);
         } else {
-          // bpWline(OUMSG_PM_SELFTEST_HIZ);
           BPMSG1092;
         }
         break;
+
       case '#':
 #ifdef BUSPIRATEV4
         MSG_RESET_MESSAGE;
@@ -671,107 +586,66 @@ void serviceuser(void) {
         print_version_info();
 #else
         BPMSG1093;
-        user_serial_wait_transmission_done(); // wait until TX finishes
+        user_serial_wait_transmission_done();
         __asm volatile("RESET");
 #endif /* BUSPIRATEV4 */
         break;
+
       case '$':
-        // bpWline("-bootloader jump");
-        if (agree()) { // bpWline("BOOTLOADER");
+        if (agree()) {
           skip_pgc_pgd_check = true;
           BPMSG1094;
           bp_delay_ms(100);
-          bp_reset_board_state(); // turn off nasty things, cleanup first
-                                  // needed?
-          user_serial_wait_transmission_done(); // wait until TX finishes
+          bp_reset_board_state();
+          user_serial_wait_transmission_done();
           __asm volatile("RESET");
         }
         break;
+
       case 'a':
-        // bpWline("-AUX low");
-        repeat = getrepeat() + 1;
-        while (--repeat)
-          bp_aux_pin_set_low();
+        bp_aux_pin_set_low();
         break;
+
       case 'A':
-        // bpWline("-AUX hi");
-        repeat = getrepeat() + 1;
-        while (--repeat)
-          bp_aux_pin_set_high();
+        bp_aux_pin_set_high();
         break;
+
       case '@':
-        // bpWline("-Aux read");
         repeat = getrepeat() + 1;
-        while (--repeat) { // bpWstring(OUMSG_AUX_INPUT_READ);
+        while (--repeat) {
           BPMSG1095;
           echo_state(bp_aux_pin_read());
           bpBR;
         }
         break;
-      case 'W': // bpWline("-PSU on");	//enable any active power supplies
-        if (bus_pirate_configuration.bus_mode ==
-            BP_HIZ) { // bpWmessage(MSG_ERROR_MODE);
-          BPMSG1088;
-        } else {
-          bp_enable_voltage_regulator();
-          bp_enable_adc();
-          bp_delay_ms(2); // wait for VREG to come up
 
-          if ((bp_read_adc(BP_ADC_3V3) > V33L) &&
-              (bp_read_adc(BP_ADC_5V0) > V5L)) { // voltages are correct
-            // bpWmessage(MSG_VREG_ON);
-            BPMSG1096;
-            bpBR;
-            // modeConfig.vregEN=1;
+      case 'W':
+        switch_psu_on();
+        break;
 
-            // Engaging Clutch
-            // finishes the set up and connects the pins...
-            enabled_protocols[bus_pirate_configuration.bus_mode]
-                .setup_execute();
-            MSG_CLUTCH_ENGAGED;
-          } else {
-            bp_disable_voltage_regulator();
-            MSG_VREG_TOO_LOW;
-            BPMSG1097;
-            bpBR;
-          }
-          bp_disable_adc();
-        }
+      case 'w':
+        switch_psu_off();
         break;
-      case 'w': // bpWline("-PSU off");	//disable the power supplies
-        if (bus_pirate_configuration.bus_mode ==
-            BP_HIZ) { // bpWmessage(MSG_ERROR_MODE);
-          BPMSG1088;
-        } else {
-          // disengaging Clutch
-          // cleans up the protocol and HiZs the pins
-          enabled_protocols[bus_pirate_configuration.bus_mode].cleanup();
-          MSG_CLUTCH_DISENGAGED;
-          bp_disable_voltage_regulator();
-          // bpWmessage(MSG_VREG_OFF);
-          BPMSG1097;
-          bpBR;
-          // modeConfig.vregEN=0;
-        }
-        break;
+
       case 'd':
         MSG_ADC_VOLTAGE_PROBE_HEADER;
         bp_adc_probe();
         MSG_VOLTAGE_UNIT;
         bpBR;
         break;
-      case 'D': // bpWline("-DVM mode");	//dumb voltmeter mode
+
+      case 'D':
         bp_adc_continuous_probe();
         break;
-      case '&': // bpWline("-delay 1ms");
+
+      case '&':
         repeat = getrepeat();
-        // bpWstring(OUMSG_PS_DELAY);
         BPMSG1099;
         bp_write_dec_word(repeat);
-        // bpWline(OUMSG_PS_DELAY_US);
         BPMSG1100;
         bp_delay_us(repeat);
         break;
+
       case '%':
         repeat = getrepeat();
         BPMSG1099;
@@ -779,26 +653,29 @@ void serviceuser(void) {
         BPMSG1212;
         bp_delay_ms(repeat);
         break;
+
 #ifdef BP_ENABLE_BASIC_SUPPORT
-      case 's': // bpWline("Listing:");
-        bus_pirate_configuration.basic = 1;
+      case 's':
+        bus_pirate_configuration.basic = ON;
         break;
-#endif          /* BP_ENABLE_BASIC_SUPPORT */
-      case 'S': // servo control
-        if (bus_pirate_configuration.bus_mode ==
-            BP_HIZ) { // bpWmessage(MSG_ERROR_MODE);
+#endif /* BP_ENABLE_BASIC_SUPPORT */
+
+      case 'S':
+        if (bus_pirate_configuration.bus_mode == BP_HIZ) {
           BPMSG1088;
         } else {
           bp_servo_setup();
         }
         break;
+
       case '<':
         mode_configuration.command_error = YES;
         temp = 1;
 
         while (cmdbuf[((cmdstart + temp) & CMDLENMSK)] != 0x00) {
           if (cmdbuf[((cmdstart + temp) & CMDLENMSK)] == '>')
-            mode_configuration.command_error = NO; // clear error if we found a > before the command ends
+            mode_configuration.command_error =
+                NO; // clear error if we found a > before the command ends
           temp++;
         }
         if (temp >= (BP_USER_MACRO_MAX_LENGTH + 3)) {
@@ -832,11 +709,7 @@ void serviceuser(void) {
                 bp_write_string(user_macros[repeat]);
                 bp_write_line(">");
               }
-            } else if ((temp > 0) &&
-                       (temp <=
-                        BP_USER_MACROS_COUNT)) { // bpWstring("execute : ");
-              // BPMSG1236;
-              // bpWdec(temp-1);
+            } else if ((temp > 0) && (temp <= BP_USER_MACROS_COUNT)) {
               bpBR;
               user_macro = temp;
             } else {
@@ -845,27 +718,26 @@ void serviceuser(void) {
           }
         }
         break;
-        // command for subsys (i2c, UART, etc)
-      case '(': // bpWline("-macro");
+
+      // command for subsys (i2c, UART, etc)
+      case '(':
         cmdstart = (cmdstart + 1) & CMDLENMSK;
         sendw = getint();
         consumewhitechars();
-        if (cmdbuf[((cmdstart)&CMDLENMSK)] ==
-            ')') { // cmdstart++;				// skip )
-          // cmdstart&=CMDLENMSK;
-          // bpWdec(sendw);
+        if (cmdbuf[((cmdstart)&CMDLENMSK)] == ')') {
           enabled_protocols[bus_pirate_configuration.bus_mode].run_macro(sendw);
           bpBR;
         } else {
           mode_configuration.command_error = YES;
         }
         break;
-      case 0x22: // bpWline("-send string");
+
+      case '"':
         mode_configuration.command_error = YES;
         temp = 1;
 
         while (cmdbuf[((cmdstart + temp) & CMDLENMSK)] != 0x00) {
-          if (cmdbuf[((cmdstart + temp) & CMDLENMSK)] == 0x22)
+          if (cmdbuf[((cmdstart + temp) & CMDLENMSK)] == '"')
             mode_configuration.command_error =
                 NO; // clear error if we found a " before the command ends
           temp++;
@@ -873,8 +745,8 @@ void serviceuser(void) {
 
         if (mode_configuration.command_error == NO) {
           BPMSG1101;
-          user_serial_transmit_character(0x22);
-          while (cmdbuf[((++cmdstart) & CMDLENMSK)] != 0x22) {
+          user_serial_transmit_character('"');
+          while (cmdbuf[((++cmdstart) & CMDLENMSK)] != '"') {
             cmdstart &= CMDLENMSK;
             user_serial_transmit_character(cmdbuf[cmdstart]);
             sendw = cmdbuf[cmdstart];
@@ -884,22 +756,27 @@ void serviceuser(void) {
             enabled_protocols[bus_pirate_configuration.bus_mode].send(sendw);
           }
           cmdstart &= CMDLENMSK;
-          user_serial_transmit_character(0x22);
+          user_serial_transmit_character('"');
           bpBR;
         }
         break;
-      case '[': // bpWline("-Start");
+
+      case '[':
         enabled_protocols[bus_pirate_configuration.bus_mode].start();
         break;
-      case '{': // bpWline("-StartR");
+
+      case '{':
         enabled_protocols[bus_pirate_configuration.bus_mode].start_with_read();
         break;
-      case ']': // bpWline("-Stop");
+
+      case ']':
         enabled_protocols[bus_pirate_configuration.bus_mode].stop();
         break;
-      case '}': // bpWline("-StopR");
+
+      case '}':
         enabled_protocols[bus_pirate_configuration.bus_mode].stop_from_read();
         break;
+
       case '0':
       case '1':
       case '2':
@@ -909,8 +786,7 @@ void serviceuser(void) {
       case '6':
       case '7':
       case '8':
-      case '9': // bpWline("-Send");
-        // bpWmessage(MSG_WRITE);
+      case '9':
         BPMSG1101;
         sendw = getint();
         cmdstart--;
@@ -919,16 +795,13 @@ void serviceuser(void) {
         numbits = getnumbits();
         if (numbits) {
           mode_configuration.numbits = numbits;
-          if (numbits > 8)
-            mode_configuration.int16 = 1;
-          else
-            mode_configuration.int16 = 0;
+          mode_configuration.int16 = numbits > 8 ? YES : NO;
         }
         while (--repeat) {
           bp_write_formatted_integer(sendw);
-          if (((mode_configuration.int16 == 0) &&
+          if (((mode_configuration.int16 == NO) &&
                (mode_configuration.numbits != 8)) ||
-              ((mode_configuration.int16 == 1) &&
+              ((mode_configuration.int16 == YES) &&
                (mode_configuration.numbits != 16))) {
             user_serial_transmit_character(';');
             bp_write_dec_byte(mode_configuration.numbits);
@@ -939,8 +812,8 @@ void serviceuser(void) {
           received =
               enabled_protocols[bus_pirate_configuration.bus_mode].send(sendw);
           bpSP;
-          if (mode_configuration.write_with_read) { // bpWmessage(MSG_READ);
-            BPMSG1102;
+          if (mode_configuration.write_with_read) {
+            MSG_READ_HEADER;
             if (mode_configuration.little_endian == YES) {
               received =
                   bp_reverse_integer(received, mode_configuration.numbits);
@@ -951,19 +824,15 @@ void serviceuser(void) {
         }
         bpBR;
         break;
-      case 'r': // bpWline("-Read");
-        // bpWmessage(MSG_READ);
-        BPMSG1102;
-        // newDmode = 0;
+
+      case 'r':
+        MSG_READ_HEADER;
         newDmode = change_read_display();
         repeat = getrepeat() + 1;
         numbits = getnumbits();
         if (numbits) {
           mode_configuration.numbits = numbits;
-          if (numbits > 8)
-            mode_configuration.int16 = 1;
-          else
-            mode_configuration.int16 = 0;
+          mode_configuration.int16 = (numbits > 8) ? YES : NO;
         }
         if (newDmode) {
           oldDmode = bus_pirate_configuration.display_mode;
@@ -976,9 +845,9 @@ void serviceuser(void) {
             received = bp_reverse_integer(received, mode_configuration.numbits);
           }
           bp_write_formatted_integer(received);
-          if (((mode_configuration.int16 == 0) &&
+          if (((mode_configuration.int16 == NO) &&
                (mode_configuration.numbits != 8)) ||
-              ((mode_configuration.int16 == 1) &&
+              ((mode_configuration.int16 == YES) &&
                (mode_configuration.numbits != 16))) {
             user_serial_transmit_character(';');
             bp_write_dec_byte(mode_configuration.numbits);
@@ -991,55 +860,45 @@ void serviceuser(void) {
         }
         bpBR;
         break;
-      case '/': // bpWline("-CLK hi");
-        // repeat=getrepeat()+1;
-        // while(--repeat)
-        //{	//bpWmessage(MSG_BIT_CLKH);
+
+      case '/':
         BPMSG1103;
         enabled_protocols[bus_pirate_configuration.bus_mode].clock_high();
-        //}
         break;
-      case '\\': // bpWline("-CLK lo");
-        // repeat=getrepeat()+1;
-        // while(--repeat)
-        //{	//bpWmessage(MSG_BIT_CLKL);
+
+      case '\\':
         BPMSG1104;
         enabled_protocols[bus_pirate_configuration.bus_mode].clock_low();
-        //}
         break;
-      case '-': // bpWline("-DAT hi");
-        // repeat=getrepeat()+1;
-        // while(--repeat)
-        //{	//bpWmessage(MSG_BIT_DATH);
+
+      case '-':
         BPMSG1105;
         enabled_protocols[bus_pirate_configuration.bus_mode].data_high();
-        //}
         break;
-      case '_': // bpWline("-DAT lo");
-        // repeat=getrepeat()+1;
-        // while(--repeat)
-        //{	//bpWmessage(MSG_BIT_DATL);
+
+      case '_':
         BPMSG1106;
         enabled_protocols[bus_pirate_configuration.bus_mode].data_low();
-        //}
         break;
-      case '.': // bpWline("-DAT state read");
-        // repeat=getrepeat()+1;
+
+      case '.':
         BPMSG1098;
         echo_state(
             enabled_protocols[bus_pirate_configuration.bus_mode].data_state());
         break;
-      case '^': // bpWline("-CLK pulse");
+
+      case '^':
         repeat = getrepeat();
         BPMSG1108;
         bp_write_formatted_integer(repeat);
         repeat++;
-        while (--repeat) { // bpWmessage(MSG_BIT_CLK);
+        while (--repeat) {
           enabled_protocols[bus_pirate_configuration.bus_mode].clock_pulse();
         }
         bpBR;
         break;
-      case '!': // bpWline("-bit read");
+
+      case '!':
         repeat = getrepeat() + 1;
         BPMSG1109;
         while (--repeat) {
@@ -1047,44 +906,45 @@ void serviceuser(void) {
               enabled_protocols[bus_pirate_configuration.bus_mode].read_bit());
           bpSP;
         }
-        // bpWmessage(MSG_BIT_NOWINPUT);
         BPMSG1107;
         break;
-        // white char/delimeters
-      case 0x00:
-      case 0x0D: // not necessary but got random error msg at end, just to be
-                 // sure
-      case 0x0A: // same here
+
+      case ASCII_NUL:
+      case ASCII_CR:
+      case ASCII_LF:
       case ' ':
       case ',':
-        break; // no match so it is an error
+        break;
+
       default:
         mode_configuration.command_error = YES;
-      } // switch(c)
+        break;
+      }
+
       cmdstart = (cmdstart + 1) & CMDLENMSK;
 
-      if (mode_configuration.command_error == YES) { // bpWstring("Syntax error at char ");
+      if (mode_configuration.command_error == YES) {
         BPMSG1110;
-        if (cmdstart > oldstart) // find error position :S
-        {
+        if (cmdstart > oldstart) {
           bp_write_dec_byte(cmdstart - oldstart);
         } else {
           bp_write_dec_byte((BP_COMMAND_BUFFER_SIZE + cmdstart) - oldstart);
         }
         mode_configuration.command_error = NO;
-        stop = 1;
+        stop = YES;
         bpBR;
       }
 
-      if (cmdstart == cmdend)
-        stop = 1; // reached end of user input??
-    }             // while(!stop)
+      if (cmdstart == cmdend) {
+        stop = YES;
+      }
+    }
 
     cmdstart = newstart;
-    cmdend = newstart; // 'empty' cmdbuffer
-    cmd = 0;
-  } // while(1)
-} // serviceuser(void)
+    cmdend = newstart;
+    menu_state.command_present = NO;
+  }
+}
 
 int getint(void) // get int from user (accept decimal, hex (0x) or binairy (0b)
 {
@@ -1203,7 +1063,7 @@ uint8_t change_read_display(void) {
 
 void consumewhitechars(void) {
   while (cmdbuf[cmdstart] == 0x20) {
-    cmdstart = (cmdstart + 1) & CMDLENMSK; // remove spaces
+    cmdstart = (cmdstart + 1) & CMDLENMSK;
   }
 }
 
@@ -1224,8 +1084,9 @@ void changemode(void) {
     }
     // bpWline("x. exit(without change)");
     BPMSG1111;
-    mode_configuration.command_error = NO; // error is set because no number found, but it is no
-                           // error here:S eeeh confusing right?
+    mode_configuration.command_error =
+        NO; // error is set because no number found, but it is no
+            // error here:S eeeh confusing right?
     busmode = getnumber(1, 1, ENABLED_PROTOCOLS_COUNT, 1) - 1;
     if ((busmode == -2) || (busmode == -1)) {
       // bpWline("no mode change");
@@ -1356,11 +1217,11 @@ again: // need to do it proper with whiles and ifs..
     case 0x08:
       if (i) {
         i--;
-        bp_write_string("\x08 \x08");
+        MSG_DESTRUCTIVE_BACKSPACE;
       } else {
         if (neg) {
           neg = 0;
-          bp_write_string("\x08 \x08");
+          MSG_DESTRUCTIVE_BACKSPACE;
         } else {
           user_serial_transmit_character(BELL);
         }
@@ -1464,11 +1325,11 @@ again: // need to do it proper with whiles and ifs..
     case 0x08:
       if (i) {
         i--;
-        bp_write_string("\x08 \x08");
+        MSG_DESTRUCTIVE_BACKSPACE;
       } else {
         if (neg) {
           neg = 0;
-          bp_write_string("\x08 \x08");
+          MSG_DESTRUCTIVE_BACKSPACE;
         } else {
           user_serial_transmit_character(BELL);
         }
@@ -1545,8 +1406,8 @@ void print_version_info(void) {
   bp_write_string(BP_VERSION_STRING);
   user_serial_transmit_character('.');
   user_serial_transmit_character(bus_pirate_configuration.hardware_version);
-  if (bus_pirate_configuration.device_type == 0x44F) {
-    // sandbox electronics clone with 44pin PIC24FJ64GA004
+  if (bus_pirate_configuration.device_type == 0x044F) {
+    /* Sandbox Electronics clone with 44pin PIC24FJ64GA004. */
     MSG_CHIP_IDENTIFIER_CLONE;
   }
   bpBR;
@@ -1597,8 +1458,8 @@ void print_version_info(void) {
   }
 #else
   MSG_CHIP_REVISION_ID_BEGIN;
-  if (bus_pirate_configuration.device_type == 0x44F) {
-    // sandbox electronics clone with 44pin PIC24FJ64GA004
+  if (bus_pirate_configuration.device_type == 0x044F) {
+    /* Sandbox Electronics clone with 44pin PIC24FJ64GA004. */
     MSG_CHIP_REVISION_ID_END_4;
   } else {
     MSG_CHIP_REVISION_ID_END_2;
@@ -1649,11 +1510,12 @@ void print_status_info(void) {
 
   print_pins_information();
 
-  // vreg status (was modeConfig.vregEN)
-  if (BP_VREGEN == 1)
-    BPMSG1096;
-  else
-    BPMSG1097; // bpWmessage(MSG_VREG_ON); else bpWmessage(MSG_VREG_OFF);
+  if (bp_get_voltage_regulator_state()) {
+    MSG_POWER_SUPPLIES_ON;
+  } else {
+    MSG_POWER_SUPPLIES_OFF;
+  }
+
   user_serial_transmit_character(',');
   bpSP;
 
@@ -1667,27 +1529,29 @@ void print_status_info(void) {
   bpSP;
 
 #ifdef BUSPIRATEV4
-  if (BP_PUVSEL50_DIR == 0) {
+  if (BP_PUVSEL50_DIR == OUTPUT) {
     MSG_VPU_5V_MARKER;
   }
-  if (BP_PUVSEL33_DIR == 0) {
+
+  if (BP_PUVSEL33_DIR == OUTPUT) {
     MSG_VPU_3V3_MARKER;
   }
 #endif /* BUSPIRATEV4 */
 
   // open collector outputs?
-  if (mode_configuration.high_impedance == YES)
+  if (mode_configuration.high_impedance == YES) {
     BPMSG1120;
-  else
-    BPMSG1121; // bpWmessage(MSG_STATUS_OUTPUT_HIZ); else
-               // bpWmessage(MSG_STATUS_OUTPUT_NORMAL);
+  } else {
+    BPMSG1121;
+  }
 
   // bitorder toggle available, enabled
-  if (mode_configuration.little_endian == NO)
+  if (mode_configuration.little_endian == NO) {
     BPMSG1123;
-  else
-    BPMSG1124; // bpWmessage(MSG_OPT_BITORDER_LSB); else
-               // bpWmessage(MSG_OPT_BITORDER_MSB);
+  } else {
+    BPMSG1124;
+  }
+
   user_serial_transmit_character(',');
   bpSP;
 
@@ -1697,12 +1561,13 @@ void print_status_info(void) {
   bp_write_dec_byte(mode_configuration.numbits);
   bpBR;
 
-  // AUX pin setting
+// AUX pin setting
 #ifdef BUSPIRATEV3
-  if (mode_configuration.alternate_aux == 1)
+  if (mode_configuration.alternate_aux == 1) {
     BPMSG1087;
-  else
+  } else {
     BPMSG1086;
+  }
 #endif /* BUSPIRATEV3 */
 
 #ifdef BUSPIRATEV4
@@ -1737,7 +1602,7 @@ void print_pins_information(void) {
 #endif /* BUSPIRATEV4 */
 
   enabled_protocols[bus_pirate_configuration.bus_mode].print_pins_state();
-  BPMSG1228; // bpWstring("P\tP\tP\tI\tI\t");
+  BPMSG1228;
 #ifdef BUSPIRATEV4
   print_pin_direction(AUX2);
   print_pin_direction(AUX1);
@@ -1754,7 +1619,7 @@ void print_pins_information(void) {
   print_pin_direction(MISO);
 #endif /* BUSPIRATEV4 */
   bpBR;
-  BPMSG1234; // bpWstring("GND\t");
+  BPMSG1234;
   bp_enable_adc();
 
 #ifdef BUSPIRATEV4
@@ -1849,7 +1714,7 @@ void set_baud_rate(void) {
     bus_pirate_configuration.terminal_speed = speed - 1;
   } else {
     mode_configuration.command_error = NO;
-    BPMSG1133;
+    MSG_UART_SET_PORT_SPEED;
     bus_pirate_configuration.terminal_speed = getnumber(9, 1, 10, 0) - 1;
   }
 
@@ -1960,10 +1825,381 @@ void convert_value(const bool reversed) {
   if (reversed) {
     value = bp_reverse_integer(value, mode_configuration.numbits);
   }
-  bp_write_hex_byte(reversed);
+  bp_write_hex_byte(value);
   MSG_BASE_CONVERTER_EQUAL_SIGN;
-  bp_write_dec_byte(reversed);
+  bp_write_dec_byte(value);
   MSG_BASE_CONVERTER_EQUAL_SIGN;
-  bp_write_bin_byte(reversed);
+  bp_write_bin_byte(value);
+  bpBR;
+}
+
+void remove_current_character_from_command_line(void) {
+  uint16_t characters_to_move = 0;
+
+  /* @todo: use memmove here and send the whole buffer afterwards? */
+
+  for (size_t index = menu_state.cursor_position; index != cmdend;
+       index = (index + 1) & CMDLENMSK) {
+    /* Move right-hand character over their left-hand counterpart. */
+    cmdbuf[index] = cmdbuf[index + 1];
+
+    /* Write the moved character. */
+    user_serial_transmit_character(cmdbuf[index] != NULL ? cmdbuf[index] : ' ');
+
+    /* Update pointer. */
+    characters_to_move++;
+  }
+
+  /* Move the buffer end to its new position. */
+  cmdend = (cmdend - 1) & CMDLENMSK;
+
+  /* Move remote cursor. */
+  bp_write_string("\x1B[");
+  bp_write_dec_word(characters_to_move);
+  bp_write_string("D");
+}
+
+void handle_delete(void) {
+  if (menu_state.cursor_position == cmdstart) {
+    /* Cursor at the beginning of the line - nothing to handle. */
+    user_serial_transmit_character(BELL);
+    return;
+  }
+
+  /* Cursor in the middle of the line. */
+
+  /* Remove characters. */
+  remove_current_character_from_command_line();
+}
+
+void handle_backspace(void) {
+  if (menu_state.cursor_position == cmdstart) {
+    /* Cursor at the beginning of the line - nothing to handle. */
+    user_serial_transmit_character(BELL);
+    return;
+  }
+
+  if (menu_state.cursor_position == cmdend) {
+    /* Cursor at the end of the line - remove item. */
+
+    /* Update pointer. */
+    cmdend = (cmdend - 1) & CMDLENMSK;
+
+    /* Clear buffer segment. */
+    cmdbuf[cmdend] = 0x00;
+
+    /* Update cursor position. */
+    menu_state.cursor_position = cmdend;
+
+    /* Move remote cursor. */
+    MSG_DESTRUCTIVE_BACKSPACE;
+
+    return;
+  }
+
+  /* Cursor in the middle of the line. */
+
+  /* Move remote cursor. */
+  MSG_CURSOR_LEFT;
+
+  /* Update current pointer. */
+  menu_state.cursor_position = (menu_state.cursor_position - 1) & CMDLENMSK;
+
+  /* Remove characters. */
+  remove_current_character_from_command_line();
+}
+
+void handle_left_arrow(void) {
+#ifdef BP_ENABLE_SUMP_SUPPORT
+  if (menu_state.binary_mode_counter >= 5) {
+    enter_sump_mode();
+    menu_state.binary_mode_counter = 0;
+    return;
+  }
+#endif /* BP_ENABLE_SUMP_SUPPORT */
+
+  if (menu_state.cursor_position != cmdstart) {
+    menu_state.cursor_position = (menu_state.cursor_position - 1) & CMDLENMSK;
+    MSG_CURSOR_LEFT;
+  } else {
+    user_serial_transmit_character(BELL);
+  }
+}
+
+void handle_right_arrow(void) {
+  if (menu_state.cursor_position == cmdend) {
+    user_serial_transmit_character(BELL);
+    return;
+  }
+  menu_state.cursor_position = (menu_state.cursor_position + 1) & CMDLENMSK;
+  MSG_CURSOR_RIGHT;
+}
+
+void refresh_mode_prompt(void) {
+  /* Clear line and carriage return. */
+  MSG_CLEAR_LINE_WITH_CR;
+
+  /* Write mode header. */
+  bp_write_string(enabled_protocols[bus_pirate_configuration.bus_mode].name);
+#ifdef BP_ENABLE_BASIC_SUPPORT
+  if (bus_pirate_configuration.basic) {
+    BPMSG1084;
+  }
+#endif /* BP_ENABLE_BASIC_SUPPORT */
+  bp_write_string(">");
+}
+
+void refresh_command_line(const uint16_t start) {
+  /* Clear current command line. */
+  if (cmdstart != cmdend) {
+    while (cmdend != cmdstart) {
+      cmdbuf[cmdend] = 0x00;
+      cmdend = (cmdend - 1) & CMDLENMSK;
+    }
+
+    cmdbuf[cmdend] = 0x00;
+  }
+
+  uint16_t repeat = (start - 1) & CMDLENMSK;
+  uint16_t old_command_start = 0;
+  while (repeat != cmdend) {
+    if (!cmdbuf[repeat]) {
+      old_command_start = (repeat + 1) & CMDLENMSK;
+      break;
+    }
+    repeat = (repeat - 1) & CMDLENMSK;
+  }
+
+  refresh_mode_prompt();
+
+  /* Write old command line. */
+  for (repeat = old_command_start; repeat != start;
+       repeat = (repeat + 1) & CMDLENMSK) {
+    user_serial_transmit_character(cmdbuf[repeat]);
+    cmdbuf[cmdend] = cmdbuf[repeat];
+    cmdend = (cmdend + 1) & CMDLENMSK;
+  }
+  cmdbuf[cmdend] = 0x00;
+
+  menu_state.cursor_position = cmdend;
+}
+
+void handle_up_arrow(void) {
+  uint16_t history_entry_index = 0;
+  uint16_t character_offset;
+
+  for (character_offset = (cmdstart - 1) & CMDLENMSK;
+       character_offset != cmdend;
+       character_offset = (character_offset - 1) & CMDLENMSK) {
+
+    if (!cmdbuf[character_offset] &&
+        cmdbuf[(character_offset - 1) & CMDLENMSK]) {
+
+      /* Found an earlier history entry in the buffer. */
+
+      history_entry_index++;
+      if (history_entry_index > menu_state.history_entry_counter) {
+        menu_state.history_entry_counter++;
+
+        refresh_command_line(character_offset);
+      }
+    }
+  }
+
+  /* First entry in the history list? */
+  if (character_offset == cmdend) {
+    user_serial_transmit_character(BELL);
+  }
+}
+
+void handle_down_arrow(void) {
+  uint16_t history_entry_index = 0;
+  uint16_t character_offset;
+
+  for (character_offset = (cmdstart - 1) & CMDLENMSK;
+       character_offset != cmdend;
+       character_offset = (character_offset - 1) & CMDLENMSK) {
+    if (!cmdbuf[character_offset] &&
+        cmdbuf[(character_offset - 1) & CMDLENMSK]) {
+
+      /* Found an earlier history entry in the buffer. */
+
+      history_entry_index++;
+      if (history_entry_index == (menu_state.history_entry_counter - 1)) {
+        menu_state.history_entry_counter--;
+        refresh_command_line(character_offset);
+      }
+    }
+  }
+
+  if (character_offset != cmdend) {
+    return;
+  }
+
+  if (menu_state.history_entry_counter != 1) {
+    /* Top entry, send a beep. */
+    user_serial_transmit_character(BELL);
+    return;
+  }
+
+  refresh_mode_prompt();
+
+  /* Clear rest of buffer. */
+
+  while (cmdend != cmdstart) {
+    cmdbuf[cmdend] = 0x00;
+    cmdend = (cmdend - 1) & CMDLENMSK;
+  }
+  cmdbuf[cmdend] = 0x00;
+  menu_state.cursor_position = cmdend;
+  menu_state.history_entry_counter = 0;
+}
+
+void handle_home_key(void) {
+  if (menu_state.cursor_position == cmdstart) {
+    user_serial_transmit_character(BELL);
+  }
+
+  size_t repeat = (menu_state.cursor_position - cmdstart) & CMDLENMSK;
+  bp_write_string("\x1B[");
+  bp_write_dec_word(repeat);
+  bp_write_string("D");
+  menu_state.cursor_position = cmdstart;
+}
+
+void handle_end_key(void) {
+  if (menu_state.cursor_position == cmdend) {
+    user_serial_transmit_character(BELL);
+  }
+
+  size_t repeat = (cmdend - menu_state.cursor_position) & CMDLENMSK;
+  bp_write_string("\x1B[");
+  bp_write_dec_word(repeat);
+  bp_write_string("C");
+  menu_state.cursor_position = cmdend;
+}
+
+void handle_escape_key(void) {
+  if (user_serial_read_byte() != '[') {
+    return;
+  }
+
+  switch (user_serial_read_byte()) {
+  case 'D':
+    handle_left_arrow();
+    break;
+
+  case 'C':
+    handle_right_arrow();
+    break;
+
+  case 'A':
+    handle_up_arrow();
+    break;
+
+  case 'B':
+    handle_down_arrow();
+    break;
+
+  case '1':
+    if (user_serial_read_byte() == '~') {
+      handle_home_key();
+    }
+    break;
+
+  case '4':
+    if (user_serial_read_byte() == '~') {
+      handle_end_key();
+    }
+    break;
+
+  default:
+    break;
+  }
+}
+
+void handle_enter_key(void) {
+  menu_state.command_present = YES;
+  menu_state.history_entry_counter = 0;
+  cmdbuf[cmdend] = 0x00;
+  cmdend = (cmdend + 1) & CMDLENMSK;
+  menu_state.cursor_position = cmdend;
+  bpBR;
+}
+
+void handle_character(const uint8_t character) {
+  if ((((cmdend + 1) & CMDLENMSK) != cmdstart) && (character >= 0x20) &&
+      (character < 0x7F)) {
+
+    if (cmdend == menu_state.cursor_position) {
+      /* Append character. */
+      user_serial_transmit_character(character);
+      cmdbuf[cmdend] = character;
+      cmdend = (cmdend + 1) & CMDLENMSK;
+      cmdbuf[cmdend] = 0x00;
+      menu_state.cursor_position = cmdend;
+    } else {
+      /* Insert character. */
+      size_t repeat = (cmdend - menu_state.cursor_position) & CMDLENMSK;
+      bp_write_string("\x1B[");
+      bp_write_dec_word(repeat);
+      bp_write_string("C");
+      uint16_t offset = cmdend;
+      while (offset != ((menu_state.cursor_position - 1) & CMDLENMSK)) {
+        cmdbuf[offset + 1] = cmdbuf[offset];
+        if (cmdbuf[offset]) {
+          user_serial_transmit_character(cmdbuf[offset]);
+          MSG_CURSOR_LEFT_TWO;
+        }
+        offset = (offset - 1) & CMDLENMSK;
+      }
+      user_serial_transmit_character(character);
+      cmdbuf[menu_state.cursor_position] = character;
+      menu_state.cursor_position = (menu_state.cursor_position + 1) & CMDLENMSK;
+      cmdend = (cmdend + 1) & CMDLENMSK;
+    }
+  } else {
+    user_serial_transmit_character(BELL);
+  }
+}
+
+void switch_psu_on(void) {
+  if (bus_pirate_configuration.bus_mode == BP_HIZ) {
+    BPMSG1088;
+    return;
+  }
+
+  bp_enable_voltage_regulator();
+  bp_enable_adc();
+
+  /* Wait for VREG to come up.*/
+  bp_delay_ms(2);
+
+  if ((bp_read_adc(BP_ADC_3V3) > V33L) && (bp_read_adc(BP_ADC_5V0) > V5L)) {
+    /* Correct voltages read. */
+    MSG_POWER_SUPPLIES_ON;
+    bpBR;
+    enabled_protocols[bus_pirate_configuration.bus_mode].setup_execute();
+    MSG_CLUTCH_ENGAGED;
+  } else {
+    bp_disable_voltage_regulator();
+    MSG_VREG_TOO_LOW;
+    MSG_POWER_SUPPLIES_OFF;
+    bpBR;
+  }
+
+  bp_disable_adc();
+}
+
+void switch_psu_off(void) {
+  if (bus_pirate_configuration.bus_mode == BP_HIZ) {
+    BPMSG1088;
+    return;
+  }
+
+  enabled_protocols[bus_pirate_configuration.bus_mode].cleanup();
+  MSG_CLUTCH_DISENGAGED;
+  bp_disable_voltage_regulator();
+  MSG_POWER_SUPPLIES_OFF;
   bpBR;
 }

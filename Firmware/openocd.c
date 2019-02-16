@@ -74,7 +74,6 @@ extern bus_pirate_configuration_t bus_pirate_configuration;
 
 static void binOpenOCDPinMode(unsigned char mode);
 static void binOpenOCDHandleFeature(unsigned char feat, unsigned char action);
-static void binOpenOCDAnswer(unsigned char *buf, unsigned int len);
 extern void binOpenOCDTapShiftFast(unsigned char *in_buf,
                                    unsigned char *out_buf, unsigned int bits,
                                    unsigned int delay);
@@ -151,21 +150,21 @@ void binOpenOCD(void) {
     case CMD_READ_ADCS:
       buf[0] = CMD_READ_ADCS;
       buf[1] = 8;
-      AD1CON1bits.ADON = 1; // turn ADC ON
-      i = bp_read_adc(12);  // ADC pin
+      AD1CON1bits.ADON = ON;
+      i = bp_read_adc(BP_ADC_PROBE);
       buf[2] = (unsigned char)(i >> 8);
       buf[3] = (unsigned char)(i);
-      i = bp_read_adc(11); // VEXT pin
+      i = bp_read_adc(BP_ADC_VPU);
       buf[4] = (unsigned char)(i >> 8);
       buf[5] = (unsigned char)(i);
-      i = bp_read_adc(10); // V33 pin
+      i = bp_read_adc(BP_ADC_3V3);
       buf[6] = (unsigned char)(i >> 8);
       buf[7] = (unsigned char)(i);
-      i = bp_read_adc(9); // V50 pin
+      i = bp_read_adc(BP_ADC_5V0);
       buf[8] = (unsigned char)(i >> 8);
       buf[9] = (unsigned char)(i);
-      AD1CON1bits.ADON = 0; // turn ADC OFF
-      binOpenOCDAnswer(buf, 10);
+      AD1CON1bits.ADON = OFF;
+      bp_write_buffer(buf, 10);
       break;
     case CMD_PORT_MODE:
       inByte = user_serial_read_byte();
@@ -199,7 +198,7 @@ void binOpenOCD(void) {
 
       buf[0] = CMD_UART_SPEED;
       buf[1] = (unsigned char)i;
-      binOpenOCDAnswer(buf, 2);
+      bp_write_buffer(buf, 2);
       break;
     case CMD_TAP_SHIFT: {
       inByte = user_serial_read_byte();
@@ -217,7 +216,7 @@ void binOpenOCD(void) {
       buf[0] = CMD_TAP_SHIFT;
       buf[1] = inByte;
       buf[2] = inByte2;
-      binOpenOCDAnswer(buf, 3);
+      bp_write_buffer(buf, 3);
 
 #if defined(BUSPIRATEV3)
       i = (j + 7) / 8; // number of bytes used
@@ -307,7 +306,8 @@ void binOpenOCD(void) {
     default:
       buf[0] = 0x00; // unknown command
       buf[1] = 0x00;
-      binOpenOCDAnswer(buf, 1);
+      /* Should this be 2 bytes long? */
+      bp_write_buffer(buf, 1);
       break;
     }
   }
@@ -349,13 +349,6 @@ static void binOpenOCDPinMode(unsigned char mode) {
     OOCD_SRST_TRIS = 1;
     OOCD_TRST_TRIS = 1;
     OOCD_TDO_TRIS = 1;
-  }
-}
-
-static void binOpenOCDAnswer(unsigned char *buf, unsigned int len) {
-  unsigned int i;
-  for (i = 0; i < len; i++) {
-    user_serial_transmit_character(buf[i]);
   }
 }
 

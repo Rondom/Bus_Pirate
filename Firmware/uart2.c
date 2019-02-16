@@ -1,6 +1,6 @@
 /*
  * This file is part of the Bus Pirate project
- * (http://code.google.com/p/the-bus-pirate/).
+ * (https://github.com/BusPirate/Bus_Pirate/).
  *
  * Written and maintained by the Bus Pirate project.
  *
@@ -30,8 +30,9 @@
 void uart2_setup(const uint16_t baud_rate_generator_prescaler,
                  const bool open_drain_output, const bool invert_polarity,
                  const uint8_t databits_and_parity, const bool stop_bits) {
+
   /* Set open drain output mode. */
-  UARTTX_ODC = open_drain_output;
+  UARTTX_ODC = (open_drain_output == UART2_OPEN_DRAIN) ? OPEN_DRAIN : PUSH_PULL;
 
   /* Map RB7 as UART TX. */
   RPINR19bits.U2RXR = UARTRX_PIN;
@@ -41,7 +42,7 @@ void uart2_setup(const uint16_t baud_rate_generator_prescaler,
   U2BRG = baud_rate_generator_prescaler;
 
   /*
-   * Initialise UART2.
+   * U2MODE - UART2 MODE REGISTER
    *
    * MSB
    * 0x000x00000C1BBA
@@ -61,11 +62,11 @@ void uart2_setup(const uint16_t baud_rate_generator_prescaler,
    */
   U2MODE = (MASKBOTTOM8(stop_bits, 1) << _U2MODE_STSEL_POSITION) |
            (MASKBOTTOM8(databits_and_parity, 2) << _U2MODE_PDSEL_POSITION) |
-           (1 << _U2MODE_BRGH_POSITION) |
+           _U2MODE_BRGH_MASK |
            (MASKBOTTOM8(invert_polarity, 1) << _U2MODE_RXINV_POSITION);
 
   /*
-   * Set UART2 status bits.
+   * U2STA - UART2 STATUS REGISTER
    *
    * MSB
    * 0A0x00--000---0-

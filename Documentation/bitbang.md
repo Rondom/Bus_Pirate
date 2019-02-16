@@ -1,7 +1,7 @@
 Bitbang
 =======
 
-![Bitbang session](images/RawSpi.png)
+![Bitbang session](images/Rawspi.png)
 
 There's two new binary I/O libraries in the v2.3 Bus Pirate firmware. Raw bitbang mode provides direct control over the Bus Pirate pins and hardware using a simple single-byte protocol.
 

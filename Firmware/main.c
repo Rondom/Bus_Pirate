@@ -89,7 +89,7 @@ int main(void) {
     usb_handler();
 #endif /* !USB_INTERRUPTS */
   } while (usb_device_state < CONFIGURED_STATE);
-  
+
   usb_register_sof_handler(CDCFlushOnTimeout);
 
 #endif /* BUSPIRATEV4 */
@@ -160,7 +160,10 @@ void initialize_board(void) {
   while (delay--) {
   }
 
-/* Set up the UART port pins. */
+  /* Set up delay timer. */
+  bp_initialise_delay_timer();
+
+  /* Set up the UART port pins. */
 
 #ifdef BUSPIRATEV3
   BP_TERM_RX = BP_TERM_RX_RP;

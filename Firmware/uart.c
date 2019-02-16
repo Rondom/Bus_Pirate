@@ -1,6 +1,6 @@
 /*
  * This file is part of the Bus Pirate project
- * (http://code.google.com/p/the-bus-pirate/).
+ * (https://github.com/BusPirate/Bus_Pirate/).
  *
  * Written and maintained by the Bus Pirate project.
  *
@@ -90,19 +90,19 @@ uint16_t uart_read(void) {
 
     /* Parity error? */
     if (U2STAbits.PERR) {
-      BPMSG1194;
+      MSG_UART_PARITY_ERROR;
     }
 
     /* Framing error? */
     if (U2STAbits.FERR) {
-      BPMSG1195;
+      MSG_UART_FRAMING_ERROR;
     }
 
     character = uart2_rx();
 
     /* Overrun error? */
     if (U2STAbits.OERR) {
-      BPMSG1196;
+      MSG_UART_OVERRUN_ERROR;
 
       /* Clear overrun flag. */
       U2STAbits.OERR = OFF;
@@ -111,7 +111,7 @@ uint16_t uart_read(void) {
     return character;
   }
 
-  BPMSG1197;
+  MSG_UART_FAILED_NO_DATA;
   return 0;
 }
 
@@ -121,7 +121,7 @@ inline uint16_t uart_write(const uint16_t character) {
 }
 
 void UARTsettings(void) {
-  BPMSG1202;
+  MSG_UART_MODE_HEADER;
   bp_write_dec_byte(mode_configuration.speed);
   bpSP;
   bp_write_dec_word((mode_configuration.speed == 9)
@@ -197,7 +197,7 @@ void uart_setup_prepare(void) {
   if (speed == 0) {
     mode_configuration.command_error = NO;
 
-    BPMSG1133;
+    MSG_UART_SET_PORT_SPEED;
 
 #if defined(BUSPIRATEV4)
     // BPv4 Mode; has custom BAUD entry and auto-baud detection
@@ -212,7 +212,7 @@ void uart_setup_prepare(void) {
     }
 
     if (mode_configuration.speed == 9) {
-      BPMSG1248;                           // say input custom BAUD rate
+      MSG_UART_CUSTOM_BAUD_RATE_PROMPT;
       abd = getlong(115200, 1, 999999, 0); // get the baud rate from user
       abd = (((32000000 / abd) / 8) - 1);  // calculate BRG
       brg = abd;                           // set BRG
@@ -226,7 +226,7 @@ void uart_setup_prepare(void) {
     mode_configuration.speed = getnumber(1, 1, 10, 0) - 1; // get user reply
 
     if (mode_configuration.speed == 9) {
-      BPMSG1248;
+      MSG_UART_RAW_BRG_PROMPT;
       brg = getnumber(34, 1, 32767, 0);
       // hack hack hack
       U2BRG = brg; // passing the brg variable to U2BRG so the UARTsetup_exc can
@@ -234,13 +234,13 @@ void uart_setup_prepare(void) {
     }
 #endif /* BUSPIRATEV4 */
 
-    BPMSG1199;
+    MSG_UART_BITS_PARITY_PROMPT;
     uart_settings.databits_parity = getnumber(1, 1, 4, 0) - 1;
 
-    BPMSG1200;
+    MSG_UART_BITS_STOP_PROMPT;
     uart_settings.stop_bits = getnumber(1, 1, 2, 0) - 1;
 
-    BPMSG1201;
+    MSG_UART_POLARITY_PROMPT;
     uart_settings.receive_polarity = getnumber(1, 1, 2, 0) - 1;
 
     MSG_PIN_OUTPUT_TYPE_PROMPT;
@@ -307,7 +307,7 @@ inline void uart_cleanup(void) { uart2_disable(); }
 void uart_run_macro(const uint16_t macro) {
   switch (macro) {
   case UART_MACRO_MENU:
-    BPMSG1203;
+    MSG_UART_MACRO_MENU;
     break;
 
   case UART_MACRO_BRIDGE_WITH_FLOW_CONTROL:
@@ -326,12 +326,8 @@ void uart_run_macro(const uint16_t macro) {
   /* Intentional fall-through. */
 
   case UART_MACRO_TRANSPARENT_BRIDGE:
-    BPMSG1204;
-#ifdef BUSPIRATEV4
-    MSG_UART_NORMAL_TO_EXIT;
-#else
-    MSG_UART_RESET_TO_EXIT;
-#endif /* BUSPIRATEV4 */
+    MSG_UART_BRIDGE;
+    MSG_UART_BRIDGE_EXIT;
 
     if (!agree()) {
       break;
@@ -385,7 +381,7 @@ void uart_run_macro(const uint16_t macro) {
     break;
 
   case UART_MACRO_RAW_UART:
-    BPMSG1206;
+    MSG_UART_RAW_UART_INPUT;
     MSG_ANY_KEY_TO_EXIT_PROMPT;
 
     U2STAbits.OERR = OFF;
@@ -440,7 +436,7 @@ void uart_start(void) {
   /* Start periodic service calls. */
   mode_configuration.periodicService = ON;
 
-  BPMSG1207;
+  MSG_UART_LIVE_DISPLAY_START;
 }
 
 void uart_stop(void) {
@@ -450,7 +446,7 @@ void uart_stop(void) {
   /* Stop periodic service calls. */
   mode_configuration.periodicService = OFF;
 
-  BPMSG1208;
+  MSG_UART_LIVE_DISPLAY_STOP;
 }
 
 bool uart_periodic_callback(void) {
@@ -467,16 +463,16 @@ bool uart_periodic_callback(void) {
     }
 
     bpBR;
-    BPMSG1102;
+    MSG_READ_HEADER;
 
     /* Parity error? */
     if (U2STAbits.PERR) {
-      BPMSG1194;
+      MSG_UART_PARITY_ERROR;
     }
 
     /* Framing error? */
     if (U2STAbits.FERR) {
-      BPMSG1195;
+      MSG_UART_FRAMING_ERROR;
     }
 
     bp_write_formatted_integer(uart2_rx());
@@ -487,7 +483,7 @@ bool uart_periodic_callback(void) {
       /* Clear overrun flag. */
       U2STAbits.OERR = OFF;
 
-      BPMSG1196;
+      MSG_UART_OVERRUN_ERROR;
     }
 
     bpBR;
@@ -526,7 +522,7 @@ uint32_t uart_get_baud_rate(const bool quiet) {
   bit_sample = 0;
 
   if (!quiet) {
-    BPMSG1280;
+    MSG_UART_WAITING_ACTIVITY;
   }
 
   /* Wait for the UART to stabilise. */
@@ -586,7 +582,7 @@ uint32_t uart_get_baud_rate(const bool quiet) {
     TMR2 = 0;
 
     if (!quiet) {
-      BPMSG1281;
+      MSG_UART_EARLY_EXIT;
     }
 
     return 0;
@@ -666,14 +662,14 @@ uint32_t uart_get_baud_rate(const bool quiet) {
 
   if (!quiet) {
     if (bit_sample > 150000) {
-      BPMSG1282;
+      MSG_UART_BAUD_OVERFLOW;
     } else {
-      BPMSG1283;
+      MSG_UART_BAUD_ESTIMATED;
       bp_write_dec_dword(bit_sample);
-      BPMSG1285;
-      BPMSG1284;
+      MSG_UART_BPS_MARKER;
+      MSG_UART_BAUD_CALCULATED;
       bp_write_dec_dword(uart_get_closest_common_rate(bit_sample));
-      BPMSG1285;
+      MSG_UART_BPS_MARKER;
     }
   }
 

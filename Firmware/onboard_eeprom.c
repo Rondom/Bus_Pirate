@@ -1,6 +1,6 @@
 /*
  * This file is part of the Bus Pirate project
- * (http://code.google.com/p/the-bus-pirate/).
+ * (https://github.com/BusPirate/Bus_Pirate/).
  *
  * Written and maintained by the Bus Pirate project.
  *
@@ -96,7 +96,7 @@ static uint8_t eeprom_i2c_read(void);
 static void eeprom_i2c_write(uint8_t value);
 
 /**
- * Sends either an ACK or a NACK on the I2C bus on data acknowledgment.
+ * Sends either an ACK or a NACK on the I2C bus on data acknowledgement.
  *
  * @param[in] ack true if a NACK needs to be sent, false if an ACK ought to be
  *                sent otherwise.
@@ -107,7 +107,7 @@ static void eeprom_i2c_write(uint8_t value);
 static void eeprom_i2c_send_ack(bool ack);
 
 /**
- * Gets the last seen acknowledgment status bit from the I2C bus.
+ * Gets the last seen acknowledgement status bit from the I2C bus.
  *
  * @return true if a NACK was detected last, false if an ACK was detected
  *              instead.
@@ -183,14 +183,12 @@ void eeprom_initialize(void) {
 }
 
 bool eeprom_test(void) {
-  bool result;
-  bool write_protection;
 
   /* Set up I2C access to the EEPROM. */
   eeprom_i2c_setup();
 
   /* Get the current write protection flag state. */
-  write_protection = BP_EE_WP;
+  bool write_protection = BP_EE_WP;
 
   /* Enable writing to the EEPROM. */
   BP_EE_WP = LOW;
@@ -204,7 +202,7 @@ bool eeprom_test(void) {
   bp_delay_ms(I2C_WRITE_DELAY_TIME);
 
   /* Checks if writing 0x10 actually succeeded. */
-  result = (eeprom_read_byte(0) == 0x10);
+  bool result = (eeprom_read_byte(0) == 0x10);
 
   /* Set offset 0 to the appropriate value. */
   eeprom_write_byte(0xFF, 0);
@@ -235,7 +233,7 @@ void eeprom_stop(void) {
   }
 }
 
-bool eeprom_i2c_get_ack(void) {
+inline bool eeprom_i2c_get_ack(void) {
 
   /* Return last seen I2C acknowledge bit. */
   return I2C1STATbits.ACKSTAT;
@@ -249,7 +247,7 @@ void eeprom_i2c_send_ack(bool ack) {
   /* Set I2C acknowledge sequence data bit. */
   I2C1CONbits.ACKEN = ON;
 
-  /* Wait for acknowledgment. */
+  /* Wait for acknowledgement. */
   while (I2C1CONbits.ACKEN == ON) {
   }
 }
@@ -274,25 +272,29 @@ uint8_t eeprom_i2c_read(void) {
   }
 
   /* Returns the byte that has just been read. */
-  return I2C1RCV & 0xFF;
+  return LO8(I2C1RCV);
 }
 
 void eeprom_i2c_setup(void) {
 
-  /* Use 7-bit slave addresses. */
-  I2C1CONbits.A10M = OFF;
-
-  /* Hold I2C clock low. */
-  I2C1CONbits.SCLREL = OFF;
+  /*
+   * I2C1CON: I2C1 CONTROL REGISTER
+   *
+   * MSB
+   * x-x0x0x0xxxxxxxx
+   *    | | |
+   *    | | +------------ SMEN:  Disable SMBus support.
+   *    | +-------------- A10M:  Use 7-bit slave addresses.
+   *    +---------------- SCREL: Enable clock stretching.
+   *
+   */
+  I2C1CON &= ~(_I2C1CON_A10M_MASK | _I2C1CON_SCLREL_MASK | _I2C1CON_SMEN_MASK);
 
   /* Clear I2C address register. */
-  I2C1ADD = 0;
+  I2C1ADD = 0x0000;
 
   /* Clear I2C address mask register. */
-  I2C1MSK = 0;
-
-  /* Disable SMBus input threshold. */
-  I2C1CONbits.SMEN = OFF;
+  I2C1MSK = 0x0000;
 
   /* Set I2C baud rate (400kHz). */
   I2C1BRG = EEPROM_I2C_CLOCK_RATE;
@@ -301,8 +303,7 @@ void eeprom_i2c_setup(void) {
   I2C1CONbits.I2CEN = ON;
 }
 
-uint8_t eeprom_read_byte(uint16_t address) {
-  uint8_t byte;
+uint8_t eeprom_read_byte(const uint16_t address) {
 
   /* Start data transmission on the bus. */
   eeprom_start();
@@ -319,9 +320,9 @@ uint8_t eeprom_read_byte(uint16_t address) {
   eeprom_i2c_write(EEPROM_I2C_READ_ADDRESS);
 
   /* Read the byte from the EEPROM. */
-  byte = eeprom_i2c_read();
+  uint8_t byte = eeprom_i2c_read();
 
-  /* Return a NACK for acknowledgment. */
+  /* Return a NACK for acknowledgement. */
   eeprom_i2c_send_ack(EEPROM_I2C_NACK);
 
   /* Stop data transmission on the bus. */
@@ -330,8 +331,7 @@ uint8_t eeprom_read_byte(uint16_t address) {
   return byte;
 }
 
-bool eeprom_write_byte(uint8_t value, uint16_t address) {
-  bool result;
+bool eeprom_write_byte(const uint8_t value, const uint16_t address) {
 
   /* Start data transmission on the bus. */
   eeprom_start();
@@ -344,8 +344,8 @@ bool eeprom_write_byte(uint8_t value, uint16_t address) {
   /* Send the byte to write to the bus. */
   eeprom_i2c_write(value);
 
-  /* Read the acknowledgment result from the operation. */
-  result = eeprom_i2c_get_ack();
+  /* Read the acknowledgement result from the operation. */
+  bool result = eeprom_i2c_get_ack();
 
   /* Stop data transmission on the bus. */
   eeprom_stop();

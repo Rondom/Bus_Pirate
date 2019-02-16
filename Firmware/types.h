@@ -18,8 +18,8 @@
 #ifndef BP_TYPES_H
 #define BP_TYPES_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /**
  * @brief Value indicating a bit to be OFF.
@@ -60,6 +60,16 @@
  * @brief Value indicating a positive statement.
  */
 #define YES 1
+
+/**
+ * @brief Value indicating a push-pull pin.
+ */
+#define PUSH_PULL 0
+
+/**
+ * @brief Value indicating an open drain pin.
+ */
+#define OPEN_DRAIN 1
 
 /**
  * @brief Returns the most significant 16 bits of the given 32-bits integer.
